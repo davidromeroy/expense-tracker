@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Gastos (demo con datos de ejemplo)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; max-width: 900px; margin-inline: auto; background:#fff; color:#111; }
+  h1 { font-size: 1.25rem; }
+  .filtros { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .filtros input, .filtros select, .filtros button { padding: .5rem; font-size: .9rem; border-radius: 6px; border:1px solid #ccc; }
+  .filtros button { background:#111; color:#fff; border:none; }
+  .charts { display: grid; grid-template-columns: 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  td, th { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid #eee; }
+  #chat { margin-top: 2rem; border-top: 1px solid #eee; padding-top: 1rem; }
+  #chatRespuesta { white-space: pre-wrap; margin-top: .5rem; font-size: .9rem; background:#f6f6f6; padding:.6rem; border-radius:8px; }
+  .badge { display:inline-block; background:#eef; color:#334; padding:.15rem .5rem; border-radius:999px; font-size:.75rem; margin-left:.5rem;}
+</style>
+</head>
+<body>
+  <h1>Gastos <span class="badge">demo — datos de ejemplo</span></h1>
+
+  <div class="filtros">
+    <input type="date" value="2026-08-01" />
+    <input type="date" value="2026-08-31" />
+    <select><option>Todas las categorías</option></select>
+    <button>Filtrar</button>
+  </div>
+
+  <div class="charts">
+    <canvas id="chartCategoria" height="220"></canvas>
+    <canvas id="chartMes" height="220"></canvas>
+  </div>
+
+  <table>
+    <thead><tr><th>Fecha</th><th>Categoría</th><th>Monto</th><th>Nota</th></tr></thead>
+    <tbody id="filas"></tbody>
+  </table>
+
+  <div id="chat">
+    <h2>Preguntar</h2>
+    <input type="text" value="¿Cuánto gasté en comida en agosto?" style="width: 70%; padding: .5rem; border-radius:6px; border:1px solid #ccc;" />
+    <button style="padding:.5rem 1rem; background:#111; color:#fff; border:none; border-radius:6px;">Preguntar</button>
+    <div id="chatRespuesta">Gastaste $184.30 en comida durante agosto 2026, repartidos en 12 registros. Es un 8% más que en julio.</div>
+  </div>
+
+<script>
+const gastos = [
+  { fecha: '2026-08-28', categoria: 'Comida', monto: 22.5, nota: 'Almuerzo' },
+  { fecha: '2026-08-26', categoria: 'Transporte', monto: 8.0, nota: 'Uber' },
+  { fecha: '2026-08-24', categoria: 'Servicios', monto: 45.0, nota: 'Internet' },
+  { fecha: '2026-08-20', categoria: 'Comida', monto: 15.75, nota: 'Supermercado' },
+  { fecha: '2026-08-15', categoria: 'Ocio', monto: 30.0, nota: 'Cine' },
+  { fecha: '2026-08-10', categoria: 'Comida', monto: 18.2, nota: '' },
+];
+
+const tbody = document.getElementById('filas');
+for (const g of gastos) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${g.fecha}</td><td>${g.categoria}</td><td>$${g.monto.toFixed(2)}</td><td>${g.nota}</td>`;
+  tbody.appendChild(tr);
+}
+
+new Chart(document.getElementById('chartCategoria'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Comida', 'Transporte', 'Servicios', 'Ocio'],
+    datasets: [{ data: [184.3, 62.0, 90.0, 55.0] }],
+  },
+  options: { plugins: { title: { display: true, text: 'Por categoría (agosto)' } } },
+});
+
+new Chart(document.getElementById('chartMes'), {
+  type: 'bar',
+  data: {
+    labels: ['2026-05', '2026-06', '2026-07', '2026-08'],
+    datasets: [{ label: 'Total', data: [310, 275, 340, 391.3] }],
+  },
+  options: { plugins: { title: { display: true, text: 'Por mes' } } },
+});
+</script>
+</body>
+</html>

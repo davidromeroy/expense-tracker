@@ -1,0 +1,22 @@
+; systemd unit — arranca el dashboard solo al bootear la Pi y lo reinicia si crashea.
+; Instalación (ver README Fase 3):
+;   sudo cp expense-tracker.service /etc/systemd/system/
+;   sudo systemctl daemon-reload
+;   sudo systemctl enable --now expense-tracker
+
+[Unit]
+Description=Expense Tracker Dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/expense-tracker/rpi
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

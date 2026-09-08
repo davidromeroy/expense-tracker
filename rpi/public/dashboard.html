@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Gastos</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; max-width: 900px; margin-inline: auto; }
+  h1 { font-size: 1.25rem; }
+  .filtros { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .filtros input, .filtros select, .filtros button { padding: .4rem; font-size: .9rem; }
+  .charts { display: grid; grid-template-columns: 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+  @media (min-width: 700px) { .charts { grid-template-columns: 1fr 1fr; } }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  td, th { text-align: left; padding: .3rem .5rem; border-bottom: 1px solid #8883; }
+  #chat { margin-top: 2rem; border-top: 1px solid #8883; padding-top: 1rem; }
+  #chatRespuesta { white-space: pre-wrap; margin-top: .5rem; font-size: .9rem; }
+</style>
+</head>
+<body>
+  <h1>Gastos</h1>
+  <p style="font-size:.85rem; color:#666; margin-top:-.5rem;">
+    Balance del período: <span id="balance">—</span>
+    (ingresos <span id="totalIngresos">—</span> · gastos <span id="totalGastos">—</span>)
+  </p>
+
+  <div class="filtros">
+    <input type="date" id="desde" />
+    <input type="date" id="hasta" />
+    <select id="categoria"><option value="">Todas las categorías</option></select>
+    <select id="metodoPago"><option value="">Todos los métodos</option></select>
+    <select id="tipo">
+      <option value="">Todos los tipos</option>
+      <option value="Gasto">Gasto</option>
+      <option value="Ingreso">Ingreso</option>
+      <option value="Ahorro">Ahorro</option>
+      <option value="Inversión">Inversión</option>
+    </select>
+    <button id="aplicar">Filtrar</button>
+  </div>
+  <p style="font-size:.75rem; color:#888;">Los gráficos de abajo son solo de Gastos — usa el filtro "Tipo" en la tabla para ver ingresos/inversiones.</p>
+
+  <div class="charts">
+    <canvas id="chartCategoria"></canvas>
+    <canvas id="chartMes"></canvas>
+  </div>
+
+  <table id="tabla">
+    <thead><tr><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Método</th><th>Monto</th><th>Nota</th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <div id="chat">
+    <h2>Preguntar</h2>
+    <input type="text" id="pregunta" placeholder="¿Cuánto gasté en comida en agosto?" style="width: 70%; padding: .4rem;" />
+    <button id="preguntar">Preguntar</button>
+    <div id="chatRespuesta"></div>
+  </div>
+
+<script>
+let chartCategoria, chartMes;
+
+async function cargarCategorias() {
+  const cats = await fetch('/api/categorias').then(r => r.json());
+  const sel = document.getElementById('categoria');
+  for (const c of cats) {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    sel.appendChild(opt);
+  }
+
+  const metodos = await fetch('/api/metodos-pago').then(r => r.json());
+  const selMetodo = document.getElementById('metodoPago');
+  for (const m of metodos) {
+    const opt = document.createElement('option');
+    opt.value = m; opt.textContent = m;
+    selMetodo.appendChild(opt);
+  }
+}
+
+function qs(params) {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v) p.set(k, v);
+  return p.toString();
+}
+
+async function cargar() {
+  const desde = document.getElementById('desde').value;
+  const hasta = document.getElementById('hasta').value;
+  const categoria = document.getElementById('categoria').value;
+  const metodo_pago = document.getElementById('metodoPago').value;
+  const tipo = document.getElementById('tipo').value;
+  const params = { desde, hasta, categoria, metodo_pago, tipo };
+
+  const [gastos, resumen, balance] = await Promise.all([
+    fetch('/api/gastos?' + qs(params)).then(r => r.json()),
+    fetch('/api/resumen?' + qs({ desde, hasta })).then(r => r.json()),
+    fetch('/api/balance?' + qs({ desde, hasta })).then(r => r.json()),
+  ]);
+
+  document.getElementById('balance').textContent = balance.neto.toFixed(2);
+  document.getElementById('totalIngresos').textContent = balance.ingresos.toFixed(2);
+  document.getElementById('totalGastos').textContent = balance.gastos.toFixed(2);
+
+  const tbody = document.querySelector('#tabla tbody');
+  tbody.innerHTML = '';
+  for (const g of gastos) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${g.fecha}</td><td>${g.tipo}</td><td>${g.categoria}</td><td>${g.metodo_pago || ''}</td><td>${g.monto.toFixed(2)}</td><td>${g.nota || ''}</td>`;
+    tbody.appendChild(tr);
+  }
+
+  const ctxCat = document.getElementById('chartCategoria');
+  if (chartCategoria) chartCategoria.destroy();
+  chartCategoria = new Chart(ctxCat, {
+    type: 'doughnut',
+    data: {
+      labels: resumen.porCategoria.map(r => r.categoria),
+      datasets: [{ data: resumen.porCategoria.map(r => r.total) }],
+    },
+    options: { plugins: { title: { display: true, text: 'Por categoría' } } },
+  });
+
+  const ctxMes = document.getElementById('chartMes');
+  if (chartMes) chartMes.destroy();
+  chartMes = new Chart(ctxMes, {
+    type: 'bar',
+    data: {
+      labels: resumen.porMes.map(r => r.mes),
+      datasets: [{ label: 'Total', data: resumen.porMes.map(r => r.total) }],
+    },
+    options: { plugins: { title: { display: true, text: 'Por mes' } } },
+  });
+}
+
+document.getElementById('aplicar').addEventListener('click', cargar);
+
+document.getElementById('preguntar').addEventListener('click', async () => {
+  const pregunta = document.getElementById('pregunta').value;
+  if (!pregunta) return;
+  const div = document.getElementById('chatRespuesta');
+  div.textContent = 'Pensando...';
+  const res = await fetch('/api/preguntar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pregunta }),
+  }).then(r => r.json());
+  div.textContent = res.respuesta || res.error || 'Sin respuesta';
+});
+
+cargarCategorias();
+cargar();
+</script>
+</body>
+</html>
