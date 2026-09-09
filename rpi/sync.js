@@ -106,7 +106,12 @@ async function syncSaldos(sheets) {
   } catch (err) {
     const msg = String(err.message || '');
     if (msg.includes('Unable to parse range') || msg.includes('not found')) {
-      console.log(`[sync] hoja "${SHEET_SALDOS}" no existe todavía — patrimonio deshabilitado`);
+      // Limpiar, no dejar huérfano: si la hoja existió y se borró, los
+      // saldos viejos en la Pi tienen que borrarse con ella. Si no, el
+      // patrimonio queda calculado con datos que el usuario ya sacó del
+      // Sheet, sin ninguna forma de notarlo.
+      replaceSaldos([]);
+      console.log(`[sync] hoja "${SHEET_SALDOS}" no existe — patrimonio deshabilitado`);
       return 0;
     }
     throw err;

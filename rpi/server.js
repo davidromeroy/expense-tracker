@@ -190,13 +190,21 @@ app.get('/api/dashboard', (_req, res) => {
   const ultimoPorCuenta = new Map();
   for (const s of saldos) ultimoPorCuenta.set(s.cuenta, s);
 
-  // Flujos: se excluye el saldo inicial disfrazado de Ingreso, y todo lo
-  // anterior a la fecha de apertura (ya está contado dentro de ese saldo).
-  const flujos = todos.filter(
-    (r) =>
-      !NOTA_SALDO_INICIAL.test(r.nota || '') &&
-      (!fechaApertura || r.fecha >= fechaApertura)
-  );
+  // Flujos: solo se excluye el saldo inicial disfrazado de Ingreso.
+  //
+  // ANTES esto también tiraba todo movimiento anterior a `fechaApertura`
+  // (la fecha del saldo más viejo de la hoja Saldos), asumiendo que ya
+  // estaba contado dentro de ese saldo. Es una trampa: `fechaApertura` es
+  // el MÍNIMO global de fechas entre TODAS las cuentas de Saldos, y una sola
+  // foto reciente (ej. "Fondo de emergencia hoy") sin una fila de apertura
+  // vieja al lado hace que ese mínimo sea HOY — y de un saque desaparecen
+  // meses enteros de movimientos reales, sin ningún error en pantalla.
+  // (Bug real, reportado: "Septiembre a Septiembre" con 8 meses de historial
+  // vivos en la base pero invisibles en el dashboard.)
+  //
+  // La fecha 2025 de un movimiento viejo (ver Decisiones, nota "Fecha 2025")
+  // se resuelve arreglando el dato en el Sheet, no filtrando fechas acá.
+  const flujos = todos.filter((r) => !NOTA_SALDO_INICIAL.test(r.nota || ''));
 
   const meses = [...new Set(flujos.map((r) => r.fecha.slice(0, 7)))].sort();
   const hoy = new Date().toISOString().slice(0, 10);
