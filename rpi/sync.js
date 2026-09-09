@@ -10,10 +10,11 @@
 require('dotenv').config();
 const fs = require('fs');
 const { google } = require('googleapis');
-const { upsertMovimientos } = require('./db');
+const { upsertMovimientos, replaceSaldos } = require('./db');
 
 const SHEET_ID = process.env.SHEET_ID;
 const SHEET_NAME = process.env.SHEET_NAME || 'Movimientos';
+const SHEET_SALDOS = process.env.SHEET_SALDOS || 'Saldos';
 const KEY_FILE = process.env.GOOGLE_SERVICE_ACCOUNT_FILE || './service-account.json';
 
 async function getSheetsClient() {
@@ -85,6 +86,41 @@ function normalizeFecha(valor) {
   return s.length > 10 && s.includes('T') ? s.slice(0, 10) : s;
 }
 
+/**
+ * Lee la hoja `Saldos` (fecha | cuenta | saldo), si existe.
+ *
+ * Es OPCIONAL a propósito: el tracker funcionaba antes de que esta hoja
+ * existiera y tiene que seguir funcionando si alguien clona el repo y no la
+ * crea. Si la hoja no está, la API responde 400 con "Unable to parse range"
+ * y eso NO es un error del sync: se avisa una vez y se sigue.
+ */
+async function syncSaldos(sheets) {
+  let res;
+  try {
+    res = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: `${SHEET_SALDOS}!A2:C`,
+      valueRenderOption: 'UNFORMATTED_VALUE',
+      dateTimeRenderOption: 'FORMATTED_STRING',
+    });
+  } catch (err) {
+    const msg = String(err.message || '');
+    if (msg.includes('Unable to parse range') || msg.includes('not found')) {
+      console.log(`[sync] hoja "${SHEET_SALDOS}" no existe todavía — patrimonio deshabilitado`);
+      return 0;
+    }
+    throw err;
+  }
+
+  const filas = (res.data.values || [])
+    .filter((r) => r[0] && r[1])
+    .map((r) => ({ fecha: normalizeFecha(r[0]), cuenta: String(r[1]).trim(), saldo: parseMonto(r[2]) }))
+    .filter((r) => r.saldo !== null);
+
+  replaceSaldos(filas);
+  return filas.length;
+}
+
 async function syncOnce() {
   if (!SHEET_ID) throw new Error('Falta SHEET_ID en .env');
 
@@ -128,7 +164,10 @@ async function syncOnce() {
     });
 
   upsertMovimientos(rows);
-  console.log(`[sync] ${new Date().toISOString()} — ${rows.length} filas sincronizadas`);
+  const nSaldos = await syncSaldos(sheets);
+  console.log(
+    `[sync] ${new Date().toISOString()} — ${rows.length} movimientos, ${nSaldos} saldos`
+  );
 
   // Ruidoso a propósito: un monto que no se puede leer es plata que desaparece
   // del dashboard. Antes esto se tragaba con `|| 0` y no había forma de notarlo.
@@ -149,4 +188,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { syncOnce, parseMonto, normalizeFecha };
+module.exports = { syncOnce, syncSaldos, parseMonto, normalizeFecha };

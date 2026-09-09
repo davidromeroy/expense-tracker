@@ -17,6 +17,12 @@ const db = new Database(DB_PATH);
 
 db.pragma('journal_mode = WAL'); // mejor concurrencia lectura/escritura en SD card
 
+// `movimientos` guarda FLUJOS: plata que se movió, con fecha.
+// `saldos` guarda SALDOS: fotos de cuánto hay en una cuenta a una fecha.
+// Son cosas distintas y por eso viven en tablas distintas: sumar un saldo
+// con un flujo da un número sin sentido (si el fondo de emergencia pasa de
+// 1.200 a 1.400 y se guardaran los dos como movimiento, el tracker diría
+// que se ahorraron 2.600 en vez de 200).
 db.exec(`
   CREATE TABLE IF NOT EXISTS movimientos (
     id TEXT PRIMARY KEY,
@@ -31,6 +37,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_mov_fecha ON movimientos(fecha);
   CREATE INDEX IF NOT EXISTS idx_mov_categoria ON movimientos(categoria);
   CREATE INDEX IF NOT EXISTS idx_mov_tipo ON movimientos(tipo);
+
+  CREATE TABLE IF NOT EXISTS saldos (
+    fecha  TEXT NOT NULL,
+    cuenta TEXT NOT NULL,
+    saldo  REAL NOT NULL,
+    PRIMARY KEY (fecha, cuenta)
+  );
 `);
 
 const upsertStmt = db.prepare(`
@@ -57,4 +70,23 @@ function countMovimientos() {
   return db.prepare('SELECT COUNT(*) AS n FROM movimientos').get().n;
 }
 
-module.exports = { db, upsertMovimientos, countMovimientos };
+const upsertSaldoStmt = db.prepare(`
+  INSERT INTO saldos (fecha, cuenta, saldo)
+  VALUES (@fecha, @cuenta, @saldo)
+  ON CONFLICT(fecha, cuenta) DO UPDATE SET saldo = excluded.saldo
+`);
+
+/**
+ * Reemplaza la tabla de saldos completa. A diferencia de los movimientos, acá
+ * sí borramos antes: una foto de saldo que desaparece de la hoja es una foto
+ * que el usuario quitó a propósito, y dejarla huérfana falsearía el patrimonio.
+ */
+function replaceSaldos(rows) {
+  const tx = db.transaction((items) => {
+    db.prepare('DELETE FROM saldos').run();
+    for (const item of items) upsertSaldoStmt.run(item);
+  });
+  tx(rows);
+}
+
+module.exports = { db, upsertMovimientos, countMovimientos, replaceSaldos };
