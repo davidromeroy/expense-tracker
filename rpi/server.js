@@ -85,8 +85,18 @@ app.get('/api/categorias', (_req, res) => {
   res.json(rows.map((r) => r.categoria));
 });
 
+// OJO con las comillas: en SQLite las comillas dobles son para IDENTIFICADORES,
+// no para strings. better-sqlite3 se compila con SQLITE_DQS=0, o sea sin el
+// fallback historico que trata un identificador desconocido como literal, asi
+// que `metodo_pago != ""` se parsea como "columna con nombre vacio" y revienta
+// con: no such column: '' - should this be a string literal in single-quotes?
+// Literales de string SIEMPRE con comilla simple.
 app.get('/api/metodos-pago', (_req, res) => {
-  const rows = db.prepare('SELECT DISTINCT metodo_pago FROM movimientos WHERE metodo_pago != "" ORDER BY metodo_pago').all();
+  const rows = db
+    .prepare(
+      "SELECT DISTINCT metodo_pago FROM movimientos WHERE metodo_pago IS NOT NULL AND metodo_pago != '' ORDER BY metodo_pago"
+    )
+    .all();
   res.json(rows.map((r) => r.metodo_pago));
 });
 
