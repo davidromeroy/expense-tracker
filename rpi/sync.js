@@ -30,6 +30,61 @@ async function getSheetsClient() {
   return google.sheets({ version: 'v4', auth: client });
 }
 
+// --- normalización de campos ---------------------------------------------
+
+/**
+ * Convierte lo que venga en la celda `monto` a un número, o null si no se puede.
+ *
+ * Con valueRenderOption UNFORMATTED_VALUE esto recibe un number y devuelve el
+ * mismo number. El resto del cuerpo es una red de seguridad para celdas que
+ * quedaron guardadas como TEXTO — algo que pasa fácil cuando escribís "1234.56"
+ * a mano en un Sheet cuyo locale espera coma decimal: Sheets no lo reconoce
+ * como número y lo guarda como cadena.
+ *
+ * Ambigüedad conocida: "1.000" puede ser mil (separador de miles) o uno con
+ * tres decimales. Se asume miles, que es lo que ocurre en la práctica, y se
+ * deja constancia acá porque es una decisión, no una casualidad.
+ */
+function parseMonto(valor) {
+  if (typeof valor === 'number') return Number.isFinite(valor) ? valor : null;
+  if (valor === null || valor === undefined) return null;
+
+  let s = String(valor).trim();
+  if (!s) return null;
+
+  s = s.replace(/[^\d,.-]/g, ''); // fuera "$", espacios, NBSP…
+  if (!s || s === '-') return null;
+
+  const ultimaComa = s.lastIndexOf(',');
+  const ultimoPunto = s.lastIndexOf('.');
+  const corte = Math.max(ultimaComa, ultimoPunto);
+
+  if (corte !== -1) {
+    const entero = s.slice(0, corte).replace(/[.,]/g, '');
+    const decimal = s.slice(corte + 1).replace(/[.,]/g, '');
+    const haySoloUnSeparador = ultimaComa === -1 || ultimoPunto === -1;
+    // "1.000" / "1,000" -> miles, no decimales
+    s = haySoloUnSeparador && decimal.length === 3 ? entero + decimal : `${entero}.${decimal}`;
+  }
+
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * La columna `fecha` es texto "YYYY-MM-DD" en la práctica, pero si alguna celda
+ * quedó como fecha real de Sheets puede llegar como número de serie (días desde
+ * 1899-12-30). Esto la devuelve siempre como "YYYY-MM-DD".
+ */
+function normalizeFecha(valor) {
+  if (typeof valor === 'number' && Number.isFinite(valor)) {
+    const ms = Math.round((valor - 25569) * 86400 * 1000); // 25569 = 1970-01-01
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  const s = String(valor || '').trim();
+  return s.length > 10 && s.includes('T') ? s.slice(0, 10) : s;
+}
+
 async function syncOnce() {
   if (!SHEET_ID) throw new Error('Falta SHEET_ID en .env');
 
@@ -37,24 +92,51 @@ async function syncOnce() {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
     range: `${SHEET_NAME}!A2:H`, // A1:H1 son encabezados, se ignoran
+
+    // UNFORMATTED_VALUE es OBLIGATORIO, no una optimización.
+    // El default de la API es FORMATTED_VALUE: devuelve el texto tal como se VE
+    // en pantalla, con el locale del Sheet aplicado. Con un Sheet en español,
+    // 1000 vuelve como la cadena "1.000,00" y `Number("1.000,00")` es NaN, que
+    // el `|| 0` de antes convertía en 0 sin avisar: el sueldo entero
+    // desaparecía del dashboard en silencio. Con UNFORMATTED_VALUE la API
+    // manda el número crudo y el locale deja de importar.
+    valueRenderOption: 'UNFORMATTED_VALUE',
+    // Contrapartida: si `fecha` fuera una fecha real de Sheets (no texto),
+    // UNFORMATTED_VALUE la devolvería como número de serie. Esto la mantiene
+    // legible; normalizeFecha() cubre el caso igual por si acaso.
+    dateTimeRenderOption: 'FORMATTED_STRING',
   });
 
   const values = res.data.values || [];
+  const descartadas = [];
+
   const rows = values
     .filter((r) => r[0]) // descarta filas sin id
-    .map((r) => ({
-      id: String(r[0]),
-      fecha: r[1] || '',
-      categoria: r[2] || '',
-      metodo_pago: r[3] || '',
-      monto: Number(r[4]) || 0,
-      nota: r[5] || '',
-      tipo: r[6] || 'Gasto',
-      recibido_en: r[7] || '',
-    }));
+    .map((r) => {
+      const monto = parseMonto(r[4]);
+      if (monto === null) descartadas.push({ id: String(r[0]), crudo: r[4] });
+      return {
+        id: String(r[0]),
+        fecha: normalizeFecha(r[1]),
+        categoria: r[2] || '',
+        metodo_pago: r[3] || '',
+        monto: monto === null ? 0 : monto,
+        nota: r[5] || '',
+        tipo: r[6] || 'Gasto',
+        recibido_en: r[7] || '',
+      };
+    });
 
   upsertMovimientos(rows);
   console.log(`[sync] ${new Date().toISOString()} — ${rows.length} filas sincronizadas`);
+
+  // Ruidoso a propósito: un monto que no se puede leer es plata que desaparece
+  // del dashboard. Antes esto se tragaba con `|| 0` y no había forma de notarlo.
+  if (descartadas.length) {
+    console.warn(`[sync] ¡OJO! ${descartadas.length} fila(s) con monto ilegible, guardadas como 0:`);
+    for (const d of descartadas) console.warn(`  id=${d.id} monto=${JSON.stringify(d.crudo)}`);
+  }
+
   return rows.length;
 }
 
@@ -67,4 +149,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { syncOnce };
+module.exports = { syncOnce, parseMonto, normalizeFecha };
