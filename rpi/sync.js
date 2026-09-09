@@ -10,7 +10,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const { google } = require('googleapis');
-const { upsertMovimientos, replaceSaldos } = require('./db');
+const { db, upsertMovimientos, replaceSaldos } = require('./db');
 
 const SHEET_ID = process.env.SHEET_ID;
 const SHEET_NAME = process.env.SHEET_NAME || 'Movimientos';
@@ -181,9 +181,21 @@ async function syncOnce() {
 
 if (require.main === module) {
   syncOnce()
-    .then(() => process.exit(0))
+    .then(() => {
+      // Cerrar la base ANTES de salir, no después: `process.exit()` corta el
+      // proceso ya, sin esperar a que el GC finalice los prepared statements
+      // que better-sqlite3 dejó vivos. En ese cruce (limpieza nativa en
+      // marcha + entorno de Node destruyéndose) V8 puede plantar:
+      //   Assertion failed: (env) != nullptr
+      //   at node::RemoveEnvironmentCleanupHook(...)
+      // db.close() finaliza todo en el hilo principal, de forma sincrónica,
+      // así que cuando llega el exit ya no queda nada nativo pendiente.
+      db.close();
+      process.exit(0);
+    })
     .catch((err) => {
       console.error('[sync] error:', err.message);
+      try { db.close(); } catch (_) {}
       process.exit(1);
     });
 }
