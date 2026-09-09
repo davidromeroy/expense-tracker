@@ -1,11 +1,19 @@
 # systemd unit — arranca el dashboard solo al bootear la Pi y lo reinicia si crashea.
 #
 # Instalación (ver README Fase 3). OJO antes de copiar:
-#   1. El usuario de esta Pi es `rpi` (no `pi`). Si en tu Pi es otro, cambia
-#      User= y las dos rutas /home/rpi/.
-#   2. Verifica dónde está node:  command -v node
+#   1. Verifica dónde está node:  command -v node
 #      Si NO es /usr/bin/node (típico con nvm), corrige ExecStart. systemd no
 #      lee tu ~/.bashrc ni el PATH de nvm: la ruta tiene que ser absoluta.
+#   2. Ajusta WorkingDirectory a la ruta real (`realpath ~/expense-tracker/rpi`).
+#
+# Corre como root A PROPÓSITO, no por descuido. Se probó con `User=rpi` (por
+# nombre y por UID numérico) y systemd fallaba siempre con
+# "Failed to determine user credentials: No such process" / status=217/USER,
+# incluso reinstalando libnss-systemd. Es un problema del systemd/NSS de esa
+# Pi (Debian trixie / systemd 257), no del usuario ni del unit. Es aceptable
+# acá: Pi personal, sin puertos expuestos a internet, acceso remoto solo por
+# Tailscale (ver README). Si en tu Pi el User= sí resuelve, agregalo de
+# vuelta — es lo ideal, esto es el fallback que funcionó.
 #
 #   sudo cp expense-tracker.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
@@ -20,7 +28,6 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=rpi
 WorkingDirectory=/home/rpi/expense-tracker/rpi
 ExecStart=/usr/bin/node server.js
 # always, no on-failure: si el proceso sale con código 0 (p.ej. un exit limpio
