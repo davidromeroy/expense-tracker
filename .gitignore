@@ -3,3 +3,6 @@ node_modules/
 service-account.json
 *.db
 .DS_Store
+
+# Guía interna para Claude Code: contexto de trabajo, no artefacto del proyecto
+CLAUDE.md
