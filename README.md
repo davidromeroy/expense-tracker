@@ -25,6 +25,69 @@ gráfico nativo de Google como respaldo. Cuando la Pi vuelve, se pone al día so
 
 ---
 
+## El dashboard
+
+Ocho vistas, una a la vez, con navegación por chips: no hay que scrollear para
+encontrar nada. Todos los gráficos son **SVG generado desde los datos** — el
+dashboard no carga ninguna librería de charts ni depende de un CDN, así que
+abre igual sin internet mientras la Pi esté encendida.
+
+![Resumen del dashboard](docs/img/dashboard-resumen.png)
+
+El **Resumen** se puede ver general o mes a mes: los chips de arriba y las
+barras del gráfico son selectores, y las tres donas, las nueve cifras y la
+lectura de abajo se recalculan.
+
+| | |
+|---|---|
+| ![Patrimonio](docs/img/dashboard-patrimonio.png) | ![Categorías](docs/img/dashboard-categorias.png) |
+| **Patrimonio** — cascada de cómo se llegó al número de hoy, y en qué cuentas está repartido. | **Categorías** — anillo con las 6 principales y desglose completo al lado. |
+| ![Métodos de pago](docs/img/dashboard-metodos.png) | ![Neto mensual](docs/img/dashboard-neto.png) |
+| **Métodos** — dólares contra movimientos, en paneles separados. Suelen dar respuestas opuestas. | **Neto mensual** — barras divergentes sobre el cero: qué meses cerraron en rojo. |
+
+Cada vista tiene su URL: `.../dashboard.html#patrimonio` abre directo esa
+pestaña, y el botón Atrás del navegador funciona.
+
+### Flujos y saldos son cosas distintas
+
+La decisión de modelo que más afecta a lo que ves:
+
+- **`movimientos`** guarda *flujos*: plata que se movió, con fecha. Un gasto,
+  un sueldo, un aporte a inversión.
+- **`saldos`** guarda *fotos*: cuánto hay en una cuenta a una fecha. El fondo
+  de emergencia, el saldo con el que arrancaste.
+
+Meter un saldo en la tabla de flujos rompe las sumas. Si tu fondo pasa de
+$1.200 a $1.400 y cargás las dos fotos como movimiento, el tracker va a decir
+que ahorraste $2.600 en vez de $200.
+
+De ahí salen dos reglas que el código aplica solo:
+
+- **Patrimonio = saldo inicial + ingresos − gastos.** La inversión *no* se
+  resta: invertir no es gastar, es la misma plata cambiando de forma.
+- **La liquidez es un número derivado**, no medido: sale de restarle al
+  patrimonio lo que está en cuentas conocidas. Si cargás el saldo real de tu
+  cuenta corriente en `Saldos` y no coincide, **esa diferencia es exactamente
+  lo que te falta registrar**. Es el mejor control de calidad del tracker.
+
+### La hoja `Saldos` (opcional)
+
+El panel de Patrimonio necesita una segunda hoja en el mismo Google Sheet,
+llamada `Saldos`, con tres columnas:
+
+```
+fecha       | cuenta              | saldo
+2026-01-01  | Banco               | 1500.00
+2026-01-01  | Inversiones         | 97.21
+2026-09-08  | Fondo de emergencia | 1239.82
+```
+
+La fila más antigua de cada cuenta es el saldo de apertura; la más reciente es
+lo que hay hoy. Si la hoja no existe el sync lo avisa una vez y sigue: todo lo
+demás funciona igual, solo se deshabilita ese panel.
+
+---
+
 ## Fase 1 — Google Sheet + Apps Script (30 min)
 
 1. Crea un Google Sheet nuevo. Nombra la primera hoja `Movimientos` (si ya la
@@ -41,7 +104,12 @@ gráfico nativo de Google como respaldo. Cuando la Pi vuelve, se pone al día so
    - Ejecutar como: **Yo**
    - Quién tiene acceso: **Cualquiera**
 6. Copia la URL que termina en `/exec`. Esa es tu endpoint.
-7. Prueba con curl antes de tocar el Atajo:
+7. **Sobre el separador decimal:** en el dato el separador es **siempre el
+   punto** (`847.26`), porque es lo único que SQLite entiende como número. Lo
+   que ves con coma en la pantalla del Sheet es el locale pintando el número,
+   no el dato. El dashboard formatea a `es-EC` (`$6.895,13`) al mostrar.
+   Formatear es cosa del front; guardar es cosa del dato, nunca al revés.
+8. Prueba con curl antes de tocar el Atajo:
    ```bash
    curl -X POST 'TU_URL_/exec' \
      -H 'Content-Type: application/json' \
@@ -137,7 +205,7 @@ Angular/frameworks pesados directamente en la Pi.
    Pi Imager, habilita SSH desde el propio Imager.
 2. Conéctate por SSH e instala Node LTS (usa NodeSource o `nvm`, evita el
    Node viejo de los repos de Debian).
-3. Copia la carpeta `rpi/` de este paquete a `/home/pi/expense-tracker/rpi`.
+3. Copia la carpeta `rpi/` de este paquete a `/home/rpi/expense-tracker/rpi`.
 4. `cd` a esa carpeta y corre `npm install`. (`better-sqlite3` compila un
    módulo nativo — en la primera instalación puede tardar varios minutos en
    la Zero 2W, es normal.)
