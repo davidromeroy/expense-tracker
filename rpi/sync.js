@@ -10,7 +10,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const { google } = require('googleapis');
-const { db, upsertMovimientos, replaceSaldos } = require('./db');
+const { db, syncMovimientos, replaceSaldos } = require('./db');
 
 const SHEET_ID = process.env.SHEET_ID;
 const SHEET_NAME = process.env.SHEET_NAME || 'Movimientos';
@@ -163,7 +163,7 @@ async function syncOnce() {
       };
     });
 
-  upsertMovimientos(rows);
+  syncMovimientos(rows);
   const nSaldos = await syncSaldos(sheets);
   console.log(
     `[sync] ${new Date().toISOString()} — ${rows.length} movimientos, ${nSaldos} saldos`

@@ -66,6 +66,32 @@ function upsertMovimientos(rows) {
   insertMany(rows);
 }
 
+/**
+ * Espeja el Sheet completo: además de upsert, BORRA de la SQLite local todo
+ * `id` que ya no está en `rows`.
+ *
+ * upsertMovimientos() sola nunca alcanza para un sync real: es upsert puro,
+ * nunca DELETE. Si borrás una fila en el Sheet, esa fila sigue viva para
+ * siempre en la Pi — el dashboard sincroniza pero nunca se entera de la baja.
+ * Como el Sheet es la fuente de verdad (comentario en sync.js), "ya no está
+ * en el Sheet" tiene que significar "ya no existe", punto.
+ */
+function syncMovimientos(rows) {
+  const ids = rows.map((r) => r.id);
+  const tx = db.transaction((items) => {
+    for (const item of items) upsertStmt.run(item);
+    if (ids.length) {
+      const marcas = ids.map(() => '?').join(',');
+      db.prepare(`DELETE FROM movimientos WHERE id NOT IN (${marcas})`).run(...ids);
+    } else {
+      // Sheet vacío no debería pasar nunca (siempre hay encabezados + datos),
+      // pero si pasara, mejor no vaciar toda la tabla por un fetch en falso.
+      console.warn('[db] syncMovimientos recibió 0 filas — no se borra nada, por las dudas.');
+    }
+  });
+  tx(rows);
+}
+
 function countMovimientos() {
   return db.prepare('SELECT COUNT(*) AS n FROM movimientos').get().n;
 }
@@ -89,4 +115,4 @@ function replaceSaldos(rows) {
   tx(rows);
 }
 
-module.exports = { db, upsertMovimientos, countMovimientos, replaceSaldos };
+module.exports = { db, upsertMovimientos, syncMovimientos, countMovimientos, replaceSaldos };
