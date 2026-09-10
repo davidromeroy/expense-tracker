@@ -12,9 +12,14 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="theme-color" content="#0d0f11" />
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap">
+<!-- Fuentes vendorizadas en fonts/ (ver fonts.css) — antes venían de
+     fonts.googleapis.com directo acá, un <link rel=stylesheet> que bloquea
+     el render: con mala señal (datos móviles por Tailscale, wifi débil) el
+     dashboard se quedaba en blanco esperando la fuente en vez de pintar los
+     datos que ya estaban listos. Reportado: "a veces tarda, a veces no
+     carga". Local, cero round-trip externo, consistente con el resto de
+     public/ (Chart.js ya estaba vendorizado; esto no lo estaba). -->
+<link rel="stylesheet" href="fonts.css">
 <!--
   Sin Chart.js. Todos los gráficos de este dashboard son SVG generado a mano
   desde los datos del API. Motivos, en orden de peso:
