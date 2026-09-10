@@ -4,6 +4,14 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Finanzas</title>
+<!-- Agregado a la pantalla de inicio de iOS como si fuera una app: estos
+     meta tags sacan la barra de Safari al abrir desde el ícono (modo
+     standalone) y le dan color al status bar / a la barra de tareas de
+     Android. No cambian nada en un navegador normal — inofensivos ahí. -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0d0f11" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap">
@@ -910,9 +918,22 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     document.getElementById('reintentar').addEventListener('click', cargar);
   }
 
-  function cargar() {
-    document.getElementById('paneles').innerHTML =
-      '<div class="panel"><div class="state"><div class="spin"></div><h2>Cargando</h2><p>Leyendo los datos de la Pi…</p></div></div>';
+  // Al volver de background/sleep (cerrar la pestaña o el navegador y volver
+  // a abrir), Tailscale/la red local puede tardar unos segundos en renegociar
+  // el túnel — el primer fetch falla por eso, no porque algo esté roto. En
+  // vez de tirar el panel de error al primer intento, reintenta solo un par
+  // de veces con espera creciente; recién si sigue sin conectar después de
+  // eso se muestra el error real con el botón manual.
+  var REINTENTOS_AUTO = [1500, 3000, 6000]; // ms de espera antes de cada reintento
+
+  function cargar(intento) {
+    intento = intento || 0;
+    document.getElementById('paneles').innerHTML = intento === 0
+      ? '<div class="panel"><div class="state"><div class="spin"></div><h2>Cargando</h2><p>Leyendo los datos de la Pi…</p></div></div>'
+      : '<div class="panel"><div class="state"><div class="spin"></div><h2>Reconectando</h2>' +
+        '<p>No respondió al primer intento — puede ser la red terminando de reconectar. ' +
+        'Reintentando (' + intento + '/' + REINTENTOS_AUTO.length + ')…</p></div></div>';
+
     fetch('api/dashboard')
       .then(function (r) {
         if (!r.ok) throw new Error('El servidor respondió ' + r.status);
@@ -929,6 +950,10 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
         pintarCabecera(); pintarChips(); pintarPanel();
       })
       .catch(function (err) {
+        if (intento < REINTENTOS_AUTO.length) {
+          setTimeout(function () { cargar(intento + 1); }, REINTENTOS_AUTO[intento]);
+          return;
+        }
         errorPanel('No pude leer los datos',
           esc(err.message) + '. Si estás fuera de casa, revisá que Tailscale esté conectado; ' +
           'si estás en casa, que el servicio siga vivo: <code>systemctl status expense-tracker</code>.');
