@@ -289,7 +289,7 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     while (v <= max + 0.001) { t.push(v); v += paso; }
     return t;
   }
-  function gauge(pctVal, color, grande, sub, label) {
+  function gauge(pctVal, color, grande, sub, label, metaPct) {
     var C = 326.73;
     var dash = Math.max(0, Math.min(100, pctVal)) / 100 * C;
     // Un dasharray de 0 con linecap="round" igual pinta un punto: el cap se
@@ -297,12 +297,30 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     // dejaba una mancha de color flotando sobre el anillo.
     var arco = dash < 0.6 ? '' :
       '<circle cx="70" cy="70" r="52" fill="none" stroke="var(' + color + ')" stroke-width="12" stroke-linecap="round" stroke-dasharray="' + dash.toFixed(1) + ' ' + C + '" transform="rotate(-90 70 70)"/>';
+    // Marca de meta: una rayita radial en el punto del anillo donde cae
+    // `metaPct` (ej. 40%), para comparar de un vistazo sin hacer la cuenta.
+    // El anillo arranca en las 12 y avanza en sentido horario — mismo ángulo
+    // que usa stroke-dasharray, así la rayita cae exactamente donde debería.
+    var marca = '';
+    if (metaPct != null) {
+      var ang = (-90 + metaPct / 100 * 360) * Math.PI / 180;
+      var x1 = (70 + 43 * Math.cos(ang)).toFixed(1), y1 = (70 + 43 * Math.sin(ang)).toFixed(1);
+      var x2 = (70 + 61 * Math.cos(ang)).toFixed(1), y2 = (70 + 61 * Math.sin(ang)).toFixed(1);
+      marca = '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="var(--ink)" stroke-width="2"/>';
+    }
     return '<div class="gauge">' + svg('0 0 140 140',
-      '<circle cx="70" cy="70" r="52" fill="none" stroke="var(--line)" stroke-width="12"/>' + arco +
+      '<circle cx="70" cy="70" r="52" fill="none" stroke="var(--line)" stroke-width="12"/>' + arco + marca +
       '<text class="gv" x="70" y="74" text-anchor="middle">' + grande + '</text>' +
       '<text class="gs" x="70" y="92" text-anchor="middle">' + esc(sub) + '</text>',
       label.replace(/<[^>]+>/g, ' ') + ' ' + grande) +
       '<p>' + label + '</p></div>';
+  }
+  function gaugeVacio(titulo, chico) {
+    return '<div class="gauge">' + svg('0 0 140 140',
+      '<circle cx="70" cy="70" r="52" fill="none" stroke="var(--line)" stroke-width="12"/>' +
+      '<text class="gv" x="70" y="74" text-anchor="middle">—</text>' +
+      '<text class="gs" x="70" y="92" text-anchor="middle">' + esc(chico) + '</text>', 'Sin datos: ' + chico) +
+      '<p>' + titulo + '</p></div>';
   }
 
   // ---------- panel: resumen ----------
@@ -340,21 +358,22 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
       '<line class="grid" x1="40" y1="78" x2="740" y2="78"/>' + barras,
       'Gasto por mes') + '</div>';
 
-    // gauges
-    var g = gauge(d.topMetPct, '--s1', pct(d.topMetPct), money0(d.gas * d.topMetPct / 100),
-      '<b>' + esc(d.topMet) + '</b><br>de tus dólares de gasto');
+    // gauges — a qué se va el sueldo, no qué método de pago usás más (eso ya
+    // está en la pestaña Métodos). Meta de referencia: menos del 40% del
+    // ingreso en gastos fijos — la marca en el anillo es ese 40%, y el color
+    // del arco pasa a rojo si te pasás.
+    var g;
     if (d.ing > 0) {
-      var noGast = d.neto / d.ing * 100;
-      g += gauge(noGast, noGast < 0 ? '--neg' : '--pos', (noGast < 0 ? '−' : '') + pct(Math.abs(noGast)),
-        (d.neto < 0 ? '−' : '') + money0(d.neto), '<b>' + (d.neto < 0 ? 'Te faltó' : 'No gastado') + '</b><br>de todo lo que entró');
+      var fijoColor = d.gasFijosPct <= 40 ? '--pos' : '--neg';
+      g = gauge(d.gasFijosPct, fijoColor, pct(d.gasFijosPct), money0(d.gasFijos),
+        '<b>Gastos fijos</b><br>de lo que entró · meta &lt;40%', 40);
+      g += gauge(d.tasa, '--s3', pct(d.tasa), money0(d.inv), '<b>Invertido</b><br>de lo que entró');
+      g += gauge(d.gasOtrosPct, '--s2', pct(d.gasOtrosPct), money0(d.gasOtros), '<b>Otros gastos</b><br>de lo que entró');
     } else {
-      g += '<div class="gauge">' + svg('0 0 140 140',
-        '<circle cx="70" cy="70" r="52" fill="none" stroke="var(--line)" stroke-width="12"/>' +
-        '<text class="gv" x="70" y="74" text-anchor="middle">—</text>' +
-        '<text class="gs" x="70" y="92" text-anchor="middle">sin ingreso</text>', 'Sin ingresos este mes') +
-        '<p><b>No gastado</b><br>aún no entró sueldo</p></div>';
+      g = gaugeVacio('<b>Gastos fijos</b><br>de lo que entró', 'sin ingreso') +
+        gaugeVacio('<b>Invertido</b><br>de lo que entró', 'sin ingreso') +
+        gaugeVacio('<b>Otros gastos</b><br>de lo que entró', 'sin ingreso');
     }
-    g += gauge(d.tasa, '--s3', pct(d.tasa), money0(d.inv), '<b>Invertido</b><br>de todo lo que entró');
 
     var filas = [
       ['Ingresos', money(d.ing), ''],
@@ -375,7 +394,10 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
         ' e invertiste ' + Math.round(d.inv / d.ing * 100) + '.</b> Tu gasto típico es ' + money(d.med) +
         ' pero el promedio es ' + money(d.prom) + ': la diferencia son las compras grandes.' +
         (mc ? ' El mes más caro fue ' + nombreMes(mc.mes) + ' (' + money0(mc.gas) + ') y el más barato ' +
-          nombreMes(mb.mes) + ' (' + money0(mb.gas) + ').' : '');
+          nombreMes(mb.mes) + ' (' + money0(mb.gas) + ').' : '') +
+        (d.gasFijosPct <= 40
+          ? ' Tus gastos fijos son ' + pct(d.gasFijosPct) + ' del ingreso: dentro de la meta de &lt;40%.'
+          : ' <b>Tus gastos fijos son ' + pct(d.gasFijosPct) + ' del ingreso, por encima de la meta de 40%.</b>');
     } else if (enCurso) {
       lectura = '<b>Mes en curso.</b> Todavía no cerró, así que no lo compares con los meses completos ' +
         'y no cuenta para «mes más caro» ni para los promedios.';

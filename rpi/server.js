@@ -129,12 +129,22 @@ function mediana(nums) {
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
+// Coincide con el nombre de categoría tal cual está en el Sheet hoy. Es un
+// match de texto, no una columna de "recurrencia" separada (esa no existe
+// todavía — ver Decisiones/Finanzas-05 en la bóveda): mezcla el arriendo y
+// el préstamo (fijos de verdad) con compras únicas mal categorizadas. Sirve
+// como primera aproximación del "% del sueldo en gastos fijos" mientras esa
+// columna no exista.
+const ES_GASTOS_FIJOS = (cat) => (cat || '').trim().toLowerCase() === 'gastos fijos';
+
 function resumenDe(movs) {
   const gastos = movs.filter((r) => r.tipo === 'Gasto');
   const montos = gastos.map((r) => r.monto);
   const ing = movs.filter((r) => r.tipo === 'Ingreso').reduce((a, r) => a + r.monto, 0);
   const gas = montos.reduce((a, b) => a + b, 0);
   const inv = movs.filter((r) => r.tipo === 'Inversión').reduce((a, r) => a + r.monto, 0);
+  const gasFijos = gastos.filter((r) => ES_GASTOS_FIJOS(r.categoria)).reduce((a, r) => a + r.monto, 0);
+  const gasOtros = gas - gasFijos;
 
   const porCat = new Map();
   const porMet = new Map();
@@ -170,6 +180,10 @@ function resumenDe(movs) {
     big: mayor ? mayor.nota || mayor.categoria : '—',
     bigV: mayor ? round2(mayor.monto) : 0,
     tasa: ing ? round2((inv / ing) * 100) : 0,
+    gasFijos: round2(gasFijos),
+    gasFijosPct: ing ? round2((gasFijos / ing) * 100) : 0,
+    gasOtros: round2(gasOtros),
+    gasOtrosPct: ing ? round2((gasOtros / ing) * 100) : 0,
   };
 }
 
