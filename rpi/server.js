@@ -8,7 +8,7 @@ require('dotenv').config();
 const path = require('path');
 const express = require('express');
 const cron = require('node-cron');
-const { db } = require('./db');
+const { db, getMeta } = require('./db');
 const { syncOnce } = require('./sync');
 const { askQuestion } = require('./chatbot');
 
@@ -313,6 +313,16 @@ app.get('/api/dashboard', (_req, res) => {
     corteCompraGrande: CORTE_COMPRA_GRANDE,
     mesEnCurso,
     filas: todos.length,
+    // De dónde saca el dashboard el aviso de "esto no se actualiza": el
+    // momento del último sync que terminó bien, y el mensaje del último que
+    // falló (si lo hay, aunque uno posterior haya salido bien — así un
+    // error transitorio no desaparece sin que el usuario lo haya visto).
+    sync: {
+      ultimoOk: getMeta('lastSyncAt'),
+      ultimoError: getMeta('lastSyncError') || null,
+      ultimoErrorEn: getMeta('lastSyncErrorAt'),
+      intervaloMin: SYNC_INTERVAL_MIN,
+    },
     general: {
       ...generalBase,
       mesMasCaro: cerrados.reduce((a, m) => (!a || m.gas > a.gas ? m : a), null),

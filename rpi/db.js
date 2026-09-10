@@ -44,6 +44,14 @@ db.exec(`
     saldo  REAL NOT NULL,
     PRIMARY KEY (fecha, cuenta)
   );
+
+  -- Metadata clave/valor: por ahora solo para rastrear el último sync exitoso
+  -- y el último error, así el dashboard puede avisar si dejó de actualizarse
+  -- en vez de mostrar datos viejos en silencio.
+  CREATE TABLE IF NOT EXISTS meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+  );
 `);
 
 const upsertStmt = db.prepare(`
@@ -115,4 +123,19 @@ function replaceSaldos(rows) {
   tx(rows);
 }
 
-module.exports = { db, upsertMovimientos, syncMovimientos, countMovimientos, replaceSaldos };
+const setMetaStmt = db.prepare(`
+  INSERT INTO meta (key, value) VALUES (@key, @value)
+  ON CONFLICT(key) DO UPDATE SET value = excluded.value
+`);
+const getMetaStmt = db.prepare('SELECT value FROM meta WHERE key = ?');
+
+function setMeta(key, value) {
+  setMetaStmt.run({ key, value: value == null ? null : String(value) });
+}
+
+function getMeta(key) {
+  const row = getMetaStmt.get(key);
+  return row ? row.value : null;
+}
+
+module.exports = { db, upsertMovimientos, syncMovimientos, countMovimientos, replaceSaldos, setMeta, getMeta };

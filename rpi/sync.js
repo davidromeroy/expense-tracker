@@ -10,7 +10,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const { google } = require('googleapis');
-const { db, syncMovimientos, replaceSaldos } = require('./db');
+const { db, syncMovimientos, replaceSaldos, setMeta } = require('./db');
 
 const SHEET_ID = process.env.SHEET_ID;
 const SHEET_NAME = process.env.SHEET_NAME || 'Movimientos';
@@ -126,7 +126,27 @@ async function syncSaldos(sheets) {
   return filas.length;
 }
 
+/**
+ * Wrapper delgado alrededor de syncOnceInner() que registra en `meta` cuándo
+ * fue el último sync exitoso y cuál fue el último error, sin importar quién
+ * la llamó (arranque, cron, el botón Sincronizar, o `npm run sync-once`).
+ * Antes un fallo solo dejaba rastro en `journalctl` — si nadie miraba la
+ * consola, el dashboard seguía mostrando datos viejos sin ningún aviso.
+ */
 async function syncOnce() {
+  try {
+    const n = await syncOnceInner();
+    setMeta('lastSyncAt', new Date().toISOString());
+    setMeta('lastSyncError', '');
+    return n;
+  } catch (err) {
+    setMeta('lastSyncErrorAt', new Date().toISOString());
+    setMeta('lastSyncError', err.message);
+    throw err;
+  }
+}
+
+async function syncOnceInner() {
   if (!SHEET_ID) throw new Error('Falta SHEET_ID en .env');
 
   const sheets = await getSheetsClient();

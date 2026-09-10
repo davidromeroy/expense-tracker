@@ -85,6 +85,10 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);font-s
 .phead h2{font-family:var(--dsp);font-weight:700;font-size:19px;letter-spacing:-.015em;margin:0}
 .tag{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:4px 9px;border-radius:6px;background:var(--card-2);color:var(--ink-3);border:1px solid var(--line)}
 .tag.warn{color:var(--s4);border-color:var(--s4)}
+/* Para el mensaje de error de sync: `.tag` fuerza mayúsculas y va bien para
+   una etiqueta corta ("⚠ SIN ACTUALIZAR"), pero una oración completa del
+   error real (puede traer una ruta de archivo) en mayúsculas es ilegible. */
+.syncerr{display:block;margin-top:4px;font-family:var(--mono);font-size:10.5px;color:var(--s4);text-transform:none}
 
 .plot{padding:10px 20px 2px;overflow-x:auto;position:relative}
 .plot svg{display:block;width:100%;height:auto}
@@ -234,6 +238,18 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
     });
+  }
+  // "hace 3m" / "hace 2h" / "hace 5d" — para el aviso de última sincronización.
+  // Minutos y no timestamp exacto a propósito: es lo que hay que mirar de un
+  // vistazo para notar "esto dejó de actualizarse", sin hacer la resta a mano.
+  function haceTiempo(iso) {
+    if (!iso) return null;
+    var min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    if (min < 1) return 'recién';
+    if (min < 60) return 'hace ' + min + 'm';
+    var h = Math.floor(min / 60);
+    if (h < 48) return 'hace ' + h + 'h';
+    return 'hace ' + Math.floor(h / 24) + 'd';
   }
 
   var SERIE = ['--s1', '--s2', '--s3', '--s4', '--s5', '--mute'];
@@ -796,10 +812,27 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     document.getElementById('rango').textContent = ms.length
       ? nombreMes(ms[0].mes) + ' a ' + nombreMes(ms[ms.length - 1].mes) + ' ' + ms[ms.length - 1].mes.slice(0, 4)
       : 'sin datos';
-    document.getElementById('srcline').innerHTML =
-      '<b>' + D.filas + ' movimientos</b> en la base · actualizado ' +
-      new Date(D.generadoEn).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' }) +
+    var sync = D.sync || {};
+    // "Actualizado hace 2m" hablaba del momento en que el DASHBOARD respondió
+    // esta request, no de cuándo se sincronizó de verdad contra el Sheet — si
+    // el sync llevaba horas fallando en silencio, esa hora igual se veía
+    // fresca. Esto usa `sync.ultimoOk`, el timestamp real del último sync que
+    // terminó bien (ver /api/dashboard → campo `sync`).
+    var minDesdeOk = sync.ultimoOk ? (Date.now() - new Date(sync.ultimoOk).getTime()) / 60000 : Infinity;
+    var stale = minDesdeOk > (sync.intervaloMin || 15) * 3;
+
+    var linea = '<b>' + D.filas + ' movimientos</b> en la base · última sync ' +
+      (sync.ultimoOk ? haceTiempo(sync.ultimoOk) : '<b>nunca</b>') +
       (D.patrimonio.disponible ? '' : ' · <b>sin hoja «Saldos»</b>: el patrimonio está deshabilitado');
+
+    if (stale) {
+      linea += ' · <span class="tag warn" style="margin-left:4px">⚠ sin actualizar ' + haceTiempo(sync.ultimoOk) + '</span>';
+    }
+    if (sync.ultimoError) {
+      linea += '<span class="syncerr">⚠ último intento de sync falló ' + haceTiempo(sync.ultimoErrorEn) +
+        ': ' + esc(sync.ultimoError) + '</span>';
+    }
+    document.getElementById('srcline').innerHTML = linea;
   }
 
   // ---------- interacción ----------
