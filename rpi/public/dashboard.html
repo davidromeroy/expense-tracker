@@ -793,14 +793,22 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     { id: 'pat', nom: 'Patrimonio', fn: panelPatrimonio },
     { id: 'evo', nom: 'Evolución', fn: panelEvolucion }
   ];
-  // El panel abierto vive en el hash para que un enlace apunte a una vista
-  // concreta (#patrimonio) y para que el botón Atrás del navegador funcione.
+  // El panel abierto vive en el hash SOLO para que un link explícito
+  // (#patrimonio) abra directo en esa vista. Deliberadamente NO se usa para
+  // decidir qué mostrar al cargar: si se leyera location.hash acá, cualquier
+  // hash que haya quedado pegado en la URL (el ícono de pantalla de inicio
+  // de iOS guarda la URL tal cual estaba al agregarlo; Safari restaura tabs
+  // con su último hash) hace que la app SIEMPRE abra en la última pestaña
+  // vista, no en Resumen. Reportado: el ícono quedó pegado en "Neto mensual"
+  // para siempre. Por eso el arranque es fijo en 'resumen' — un link con
+  // hash sigue funcionando porque `hashchange` (más abajo) lo agarra después
+  // del primer render.
   var IDS = PANELES.map(function (p) { return p.id; });
   function panelDeHash() {
     var h = (location.hash || '').replace('#', '');
     return IDS.indexOf(h) >= 0 ? h : 'resumen';
   }
-  var activo = panelDeHash();
+  var activo = 'resumen';
 
   function pintarChips() {
     var bar = document.getElementById('chipbar');
@@ -866,21 +874,28 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
   }
 
   // ---------- interacción ----------
+  // Cambia de pestaña sin empujar una entrada nueva al historial del
+  // navegador. Antes esto era `location.hash = activo`, que sí la empuja —
+  // en el iPhone, deslizar la barra de meses (horizontal, pegada al borde
+  // izquierdo) dispara por error el gesto nativo "atrás" de iOS, y esa
+  // entrada de historial hacía que te devolviera a la pestaña anterior de
+  // la nada. replaceState actualiza la URL (el link con #hash sigue
+  // sirviendo para abrir una vista puntual) pero no arma pila de "atrás".
+  function irA(id) {
+    activo = id;
+    if (location.hash !== '#' + activo) history.replaceState(null, '', '#' + activo);
+    pintarChips(); pintarPanel();
+  }
+
   function conectar() {
     var chips = [].slice.call(document.querySelectorAll('.chip'));
     chips.forEach(function (c, i) {
-      c.addEventListener('click', function () {
-        activo = c.dataset.p;
-        if (location.hash !== '#' + activo) location.hash = activo;
-        pintarChips(); pintarPanel();
-      });
+      c.addEventListener('click', function () { irA(c.dataset.p); });
       c.addEventListener('keydown', function (e) {
         var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
         if (!d) return;
         e.preventDefault();
-        activo = chips[(i + d + chips.length) % chips.length].dataset.p;
-        if (location.hash !== '#' + activo) location.hash = activo;
-        pintarChips(); pintarPanel();
+        irA(chips[(i + d + chips.length) % chips.length].dataset.p);
         document.querySelector('.chip[aria-selected="true"]').focus();
       });
     });
