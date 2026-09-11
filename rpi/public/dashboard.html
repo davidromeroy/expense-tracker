@@ -77,10 +77,13 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);font-s
 .led dd span{font-size:.55em;font-weight:700;color:var(--ink-3)}
 .led p{margin:7px 0 0;font-family:var(--mono);font-size:10px;color:var(--ink-3);line-height:1.4}
 .led.in dd{color:var(--pos)} .led.out dd{color:var(--neg)} .led.inv dd{color:var(--s3)} .led.sal dd{color:var(--s4)}
+.led.fon dd{color:var(--s4)} .led.liq dd{color:var(--s1)}
 .led.pat{background:var(--card-2);border-color:var(--ink-3)}
 .led.tgl{cursor:pointer;transition:border-color .16s,background .16s}
 .led.tgl:hover{border-color:var(--ink-3)}
 .led.tgl:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.led dt .swap{font-style:normal;color:var(--ink-3);font-size:11px;margin-left:2px}
+.led.tgl:hover dt .swap{color:var(--brand)}
 .srcline{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin:10px 0 14px;line-height:1.7}
 .srcline b{color:var(--ink-2);font-weight:500}
 
@@ -985,10 +988,10 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     ];
 
     // Invertido <-> Fondo de emergencia comparten tarjeta, click/tap alterna.
-    // Los dos son APORTES acumulados (flujo), no el saldo real de la cuenta
-    // hoy — eso necesita la hoja Saldos, que todavía no existe.
+    // Colores distintos (s3 morado / s4 ámbar) a propósito — con el mismo
+    // color no se notaba que habían cambiado de contenido al tocar.
     cards.push(verFondo
-      ? { c: 'inv', t: 'Fondo de emergencia', v: g.fondoEmergenciaTotal, s: 'acumulado · tocá para ver invertido', tgl: 'fondo' }
+      ? { c: 'fon', t: 'Fondo de emergencia', v: g.fondoEmergenciaTotal, s: 'acumulado · tocá para ver invertido', tgl: 'fondo' }
       : { c: 'inv', t: 'Invertido', v: D.invMes.length ? D.invMes[D.invMes.length - 1].acumulado : 0, s: 'acumulado · tocá para ver fondo', tgl: 'fondo' });
 
     if (p.disponible) {
@@ -997,27 +1000,22 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
       });
       cards.push({ c: 'pat', t: 'Patrimonio hoy', v: p.total, s: 'todo lo que tenés' });
     } else {
-      // Neto <-> Liquidez comparten tarjeta. "Cerré el mes en positivo"
-      // (neto) y "tengo esa plata disponible" (liquidez) son afirmaciones
-      // distintas si una parte ya se fue a inversión o al fondo — ver el
-      // comentario de `liquidez` en server.js.
-      //
-      // OJO con el subtítulo: dice "aportes ahorro", no "fondo", a propósito.
-      // Reportado: alguien restó a mano Neto − Invertido − Fondo de
-      // emergencia (usando el TOTAL que muestra esa tarjeta, semilla vieja
-      // incluida) y no daba lo mismo que Liquidez — porque Liquidez resta
-      // solo los aportes de ahorro DEL PERÍODO, no el total acumulado. Las
-      // dos tarjetas miden cosas distintas del mismo dato a propósito (ver
-      // fondoEmergenciaTotal en server.js), pero eso invita justo a esa
-      // resta cruzada. "Aportes ahorro" en vez de "ahorro" a solas.
+      // Neto <-> Liquidez comparten tarjeta. Neto es flujo puro del período
+      // (ingresos − gastos, sin semilla). Liquidez es otra cosa: patrimonio
+      // total (semilla de enero + todo lo que entró y salió) menos lo que
+      // ya está en Invertido/Fondo — lo único que puede quedar en
+      // banco/efectivo. Fórmula completa y por qué la semilla importa: ver
+      // el comentario de `patrimonioInicialMov`/`liquidez` en server.js.
       cards.push(verLiquidez
-        ? { c: '', t: 'Liquidez', v: g.liquidez, s: 'ing − gas − inv − aportes ahorro · tocá para ver neto', tgl: 'liquidez' }
+        ? { c: 'liq', t: 'Liquidez', v: g.liquidez, s: 'patrimonio − invertido − fondo · tocá para ver neto', tgl: 'liquidez' }
         : { c: '', t: 'Neto', v: g.neto, s: 'ingresos − gastos · tocá para ver liquidez', tgl: 'liquidez' });
     }
     document.getElementById('ledger').innerHTML = cards.map(function (k) {
       var partes = nf.format(Math.abs(k.v)).split(',');
+      // El ícono ⇄ en el título es la señal de "esto se puede tocar para
+      // cambiar" — antes solo estaba en el subtítulo chico, y no se notaba.
       return '<div class="led ' + k.c + (k.tgl ? ' tgl' : '') + '"' + (k.tgl ? ' data-tgl="' + k.tgl + '" tabindex="0" role="button"' : '') +
-        '><dt>' + esc(k.t) + '</dt><dd>' + (k.v < 0 ? '−' : '') + '$' +
+        '><dt>' + esc(k.t) + (k.tgl ? ' <i class="swap" aria-hidden="true">⇄</i>' : '') + '</dt><dd>' + (k.v < 0 ? '−' : '') + '$' +
         partes[0] + '<span>,' + partes[1] + '</span></dd><p>' + esc(k.s) + '</p></div>';
     }).join('');
 

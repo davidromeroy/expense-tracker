@@ -173,12 +173,6 @@ function resumenDe(movs) {
     gas: round2(gas),
     inv: round2(inv),
     ahorro: round2(ahorro),
-    // Lo que no se gastó, no se invirtió y no se apartó a ahorro: lo que
-    // queda de verdad en cuentas/efectivo. Distinto de `neto` (que solo
-    // resta gastos) — "cerré el mes en positivo" y "tengo esa plata
-    // disponible" son afirmaciones distintas si una parte ya se fue a
-    // inversión o al fondo de emergencia.
-    liquidez: round2(ing - gas - inv - ahorro),
     neto: round2(ing - gas),
     n: gastos.length,
     med: round2(mediana(montos)),
@@ -252,15 +246,41 @@ app.get('/api/dashboard', (_req, res) => {
   const generalBase = resumenDe(flujos);
 
   // Fondo de emergencia TOTAL (para la tarjeta) es otra pregunta que
-  // `generalBase.ahorro` (aportes del período, usado en `liquidez`): acá SÍ
-  // hay que contar la fila "Actual" — es la semilla de lo que ya tenías
-  // ahorrado antes de trackear, misma idea que `patrimonioInicial` para el
-  // patrimonio. Sin ella, la tarjeta muestra solo los aportes nuevos y
-  // esconde la plata que de verdad hay guardada. Se suma sobre `todos`, no
-  // `flujos`, justamente para NO pasar por el filtro que la excluye.
+  // `generalBase.ahorro` (aportes del período): acá SÍ hay que contar la
+  // fila "Actual" — es la semilla de lo que ya tenías ahorrado antes de
+  // trackear, misma idea que `patrimonioInicial` para el patrimonio. Sin
+  // ella, la tarjeta muestra solo los aportes nuevos y esconde la plata que
+  // de verdad hay guardada. Se suma sobre `todos`, no `flujos`, justamente
+  // para NO pasar por el filtro que la excluye.
   const fondoEmergenciaTotal = round2(
     todos.filter((r) => r.tipo === 'Ahorro').reduce((a, r) => a + r.monto, 0)
   );
+
+  // Semilla de patrimonio (fila "Patrimonio Actual", tipo=Ingreso) — misma
+  // idea que fondoEmergenciaTotal arriba, sobre `todos` para no perderla.
+  // Reportado: la primera versión de `liquidez` no la usaba en absoluto (la
+  // excluía como si nunca hubiera existido), y daba un número muy lejos del
+  // real. Probado contra los saldos reales del usuario: agregarla acá SÍ
+  // cierra la cuenta — confirmado que el "Actual" de enero y el "Actual"
+  // del fondo de emergencia NO se solapan (son plata distinta), así que
+  // sumar los dos no duplica nada.
+  const patrimonioInicialMov = round2(
+    todos.filter((r) => r.tipo === 'Ingreso' && NOTA_FOTO_SALDO.test(r.nota || ''))
+      .reduce((a, r) => a + r.monto, 0)
+  );
+
+  // Patrimonio total = semilla + todo lo que entró - todo lo que salió.
+  // Liquidez = ese total MENOS lo que ya está en otro lado (invertido +
+  // fondo) — lo que queda es lo único que puede estar en banco/efectivo.
+  // Ojo: acá se resta el TOTAL de invertido/fondo (no solo aportes del
+  // período) porque toda esa plata, venga de cuando venga, no está en la
+  // cuenta corriente hoy.
+  // `generalBase.inv` sirve tal cual como "invertido total": no hay una
+  // fila "Inversión Actual" en los datos (comprobado — la única palabra
+  // "actual" en todo el Sheet aparece en las 2 filas ya cubiertas arriba),
+  // así que los aportes acumulados SON el total, sin semilla aparte.
+  const patrimonioTotalMov = round2(patrimonioInicialMov + generalBase.ing - generalBase.gas);
+  const liquidez = round2(patrimonioTotalMov - generalBase.inv - fondoEmergenciaTotal);
 
   const porCategoria = [...gastos.reduce((map, r) => {
     const c = map.get(r.categoria) || { categoria: r.categoria, total: 0, n: 0, unico: 0 };
@@ -365,6 +385,7 @@ app.get('/api/dashboard', (_req, res) => {
     general: {
       ...generalBase,
       fondoEmergenciaTotal,
+      liquidez,
       mesMasCaro: cerrados.reduce((a, m) => (!a || m.gas > a.gas ? m : a), null),
       mesMasBarato: cerrados.reduce((a, m) => (!a || m.gas < a.gas ? m : a), null),
     },
