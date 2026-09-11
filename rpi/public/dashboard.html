@@ -310,7 +310,15 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     var s = max / n / paso;
     paso *= s > 5 ? 10 : s > 2 ? 5 : s > 1 ? 2 : 1;
     var t = [], v = 0;
-    while (v <= max + 0.001) { t.push(v); v += paso; }
+    // El último tick tiene que quedar >= max, no solo <=. Antes el loop
+    // paraba apenas se pasaba de max, así que el ÚLTIMO tick push()eado
+    // podía quedar por debajo (ej. max=1206 con paso=500 daba techo=1000).
+    // Como el resto del código escala las barras contra ese techo
+    // (`tope = ticks[ticks.length-1]`), la barra más alta terminaba más
+    // alta que el área del gráfico y su etiqueta de valor se cortaba
+    // contra el borde del SVG. (Bug real, reportado en el panel Ingresos.)
+    while (v < max) { t.push(v); v += paso; }
+    t.push(v);
     return t;
   }
   function gauge(pctVal, color, grande, sub, label, metaPct) {
