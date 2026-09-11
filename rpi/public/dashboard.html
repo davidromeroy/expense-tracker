@@ -122,6 +122,20 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);font-s
 .seg button[aria-pressed="true"]{background:var(--brand);color:#fff}
 .seg button:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
 
+.tools.det select,.tools.det input[type="search"]{font-family:var(--ui);font-size:12.5px;font-weight:500;
+  padding:7px 11px;min-height:32px;border-radius:9px;border:1px solid var(--line);background:var(--card-2);
+  color:var(--ink);appearance:none}
+.tools.det select{padding-right:26px;
+  background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6"><path d="M1 1l4 4 4-4" fill="none" stroke="%238b949c" stroke-width="1.5"/></svg>');
+  background-repeat:no-repeat;background-position:right 9px center}
+.tools.det input[type="search"]{flex:1 1 160px;min-width:120px}
+.tools.det select:focus-visible,.tools.det input:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+th.ord{cursor:pointer;user-select:none}
+th.ord:hover{color:var(--ink)}
+th.ord.on{color:var(--ink)}
+th.ord:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
+.detmsg{text-align:center!important;padding:22px 10px!important;color:var(--ink-3);font-size:13px;white-space:normal!important}
+
 .mesbar{display:flex;gap:6px;overflow-x:auto;padding:10px 20px 2px;scrollbar-width:none}
 .mesbar::-webkit-scrollbar{display:none}
 .mchip{flex:0 0 auto;font-family:var(--ui);font-size:12px;font-weight:600;padding:6px 12px;min-height:32px;border-radius:8px;
@@ -787,6 +801,125 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
         : 'Ningún método creció de forma sostenida en el período.') + '</div></section>';
   }
 
+  // ---------- panel: detalle (tabla filtrable) ----------
+  // A diferencia del resto de paneles, este no se deriva de `D` (que solo
+  // trae agregados) — pide filas crudas a /api/gastos, que ya existía y ya
+  // soportaba desde/hasta/categoria/metodo_pago/tipo por querystring. Cero
+  // endpoint nuevo. El resultado se cachea en `detFilas`; cambiar de filtro
+  // reconsulta al server, pero ordenar u escribir en el buscador de nota
+  // reordena/filtra en memoria sobre esa caché — no hay motivo para golpear
+  // la red por eso con ~200 filas.
+  var detFiltro = { mes: -1, tipo: 'Gasto', cat: '', metodo: '', q: '' };
+  var detOrden = { col: 'fecha', dir: 'desc' };
+  var detFilas = null;
+
+  function thOrd(col, label) {
+    var on = detOrden.col === col;
+    return '<th data-ord="' + col + '" class="ord' + (on ? ' on' : '') + '" tabindex="0" role="button" aria-sort="' +
+      (on ? (detOrden.dir === 'asc' ? 'ascending' : 'descending') : 'none') + '">' + esc(label) +
+      (on ? (detOrden.dir === 'asc' ? ' ↑' : ' ↓') : '') + '</th>';
+  }
+
+  function panelDetalle() {
+    var meses = D.porMes;
+    var mchips = '<button class="mchip" data-dm="-1" role="tab" aria-selected="' + (detFiltro.mes < 0) + '">Todo</button>' +
+      meses.map(function (m, i) {
+        return '<button class="mchip" data-dm="' + i + '" role="tab" aria-selected="' + (detFiltro.mes === i) + '">' +
+          cap(nombreMes(m.mes, true)) + '</button>';
+      }).join('');
+
+    var TIPOS = ['', 'Gasto', 'Ingreso', 'Ahorro', 'Inversión'];
+    var segTipo = '<div class="seg" role="tablist" aria-label="Tipo">' + TIPOS.map(function (t) {
+      return '<button type="button" data-dtipo="' + esc(t) + '" aria-pressed="' + (detFiltro.tipo === t) + '">' +
+        (t || 'Todos') + '</button>';
+    }).join('') + '</div>';
+
+    var catOpts = '<option value="">Categoría: todas</option>' + D.porCategoria.map(function (c) {
+      return '<option value="' + esc(c.categoria) + '"' + (detFiltro.cat === c.categoria ? ' selected' : '') + '>' + esc(c.categoria) + '</option>';
+    }).join('');
+    var metOpts = '<option value="">Método: todos</option>' + D.porMetodo.map(function (m) {
+      return '<option value="' + esc(m.metodo) + '"' + (detFiltro.metodo === m.metodo ? ' selected' : '') + '>' + esc(m.metodo) + '</option>';
+    }).join('');
+
+    return '<section class="panel">' +
+      '<div class="phead"><h2>Detalle</h2><span class="tag" id="detCount">—</span></div>' +
+      '<div class="mesbar" role="tablist" aria-label="Mes">' + mchips + '</div>' +
+      '<div class="tools det">' + segTipo +
+        '<select id="detCat" aria-label="Filtrar por categoría">' + catOpts + '</select>' +
+        '<select id="detMet" aria-label="Filtrar por método de pago">' + metOpts + '</select>' +
+        '<input type="search" id="detQ" placeholder="Buscar en nota…" value="' + esc(detFiltro.q) + '">' +
+      '</div>' +
+      '<div class="tablewrap"><table>' +
+        '<thead><tr>' + thOrd('fecha', 'Fecha') + thOrd('categoria', 'Categoría') +
+          '<th>Método</th><th>Nota</th>' + thOrd('monto', 'Monto') + '</tr></thead>' +
+        '<tbody id="detBody"><tr><td colspan="5" class="detmsg">Cargando…</td></tr></tbody>' +
+      '</table></div>' +
+      '<div class="read">Tocá el encabezado de <b>Fecha</b> o <b>Monto</b> para ordenar. El filtro de mes, tipo, categoría y ' +
+        'método se cruzan entre sí — todo lo de Alimentos en julio, por ejemplo.</div></section>';
+  }
+
+  function detRango() {
+    if (detFiltro.mes < 0) return {};
+    var mes = D.porMes[detFiltro.mes].mes; // 'YYYY-MM'
+    // '-31' como límite superior funciona aunque el mes tenga menos días: la
+    // comparación es de texto 'YYYY-MM-DD', y cualquier fecha real de ese
+    // mes ordena antes que '...-31' igual.
+    return { desde: mes + '-01', hasta: mes + '-31' };
+  }
+
+  function cargarDetalle() {
+    var body = document.getElementById('detBody');
+    if (!body) return; // se cambió de pestaña antes de que esto corriera
+    body.innerHTML = '<tr><td colspan="5" class="detmsg">Cargando…</td></tr>';
+    var q = Object.assign(detRango(), {});
+    if (detFiltro.tipo) q.tipo = detFiltro.tipo;
+    if (detFiltro.cat) q.categoria = detFiltro.cat;
+    if (detFiltro.metodo) q.metodo_pago = detFiltro.metodo;
+    fetch('api/gastos?' + new URLSearchParams(q).toString())
+      .then(function (r) { return r.json(); })
+      .then(function (rows) { detFilas = rows; pintarDetalle(); })
+      .catch(function (err) {
+        var b = document.getElementById('detBody');
+        if (b) b.innerHTML = '<tr><td colspan="5" class="detmsg">No se pudo cargar: ' + esc(err.message) + '</td></tr>';
+      });
+  }
+
+  function pintarDetalle() {
+    var body = document.getElementById('detBody'), count = document.getElementById('detCount');
+    if (!body || !detFilas) return;
+
+    var q = detFiltro.q.trim().toLowerCase();
+    var filas = q ? detFilas.filter(function (r) { return (r.nota || '').toLowerCase().indexOf(q) >= 0; }) : detFilas;
+
+    var ordenadas = filas.slice().sort(function (a, b) {
+      var av = a[detOrden.col], bv = b[detOrden.col];
+      if (detOrden.col === 'monto') { av = Number(av); bv = Number(bv); }
+      var c = av < bv ? -1 : av > bv ? 1 : 0;
+      return detOrden.dir === 'asc' ? c : -c;
+    });
+
+    if (count) {
+      var total = ordenadas.reduce(function (a, r) { return a + r.monto; }, 0);
+      count.textContent = ordenadas.length + (ordenadas.length === 1 ? ' movimiento' : ' movimientos') + ' · ' + money0(total);
+    }
+
+    body.innerHTML = ordenadas.length
+      ? ordenadas.map(function (r) {
+          return '<tr><td>' + esc(r.fecha) + '</td><td>' + esc(r.categoria) + '</td><td>' + esc(r.metodo_pago || '—') +
+            '</td><td>' + esc(r.nota || '') + '</td><td class="num">' + money(r.monto) + '</td></tr>';
+        }).join('')
+      : '<tr><td colspan="5" class="detmsg">Nada con estos filtros.</td></tr>';
+  }
+
+  function refrescarDetalle() { pintarPanel(); cargarDetalle(); }
+
+  function ordenarDetalle(col) {
+    detOrden.dir = detOrden.col === col && detOrden.dir === 'desc' ? 'asc' : 'desc';
+    detOrden.col = col;
+    pintarPanel();   // redibuja el header con la flecha en la columna correcta
+    pintarDetalle(); // reordena lo que ya está en memoria, sin pedirle nada al server
+  }
+
   // ---------- render ----------
   var PANELES = [
     { id: 'resumen', nom: 'Resumen', fn: panelResumen },
@@ -796,7 +929,8 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     { id: 'ingresos', nom: 'Ingresos', fn: panelIngresos },
     { id: 'inv', nom: 'Inversiones', fn: panelInversiones },
     { id: 'pat', nom: 'Patrimonio', fn: panelPatrimonio },
-    { id: 'evo', nom: 'Evolución', fn: panelEvolucion }
+    { id: 'evo', nom: 'Evolución', fn: panelEvolucion },
+    { id: 'detalle', nom: 'Detalle', fn: panelDetalle }
   ];
   // El panel abierto vive en el hash SOLO para que un link explícito
   // (#patrimonio) abra directo en esa vista. Deliberadamente NO se usa para
@@ -905,7 +1039,12 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
       });
     });
 
-    [].forEach.call(document.querySelectorAll('.mchip'), function (c) {
+    // [data-m] (Resumen) y [data-dm] (Detalle) son dos selectores de mes
+    // independientes que comparten la clase visual .mchip — sin el atributo
+    // en el selector, este bind pisaría el estado del otro panel (Resumen
+    // usa `mesSel`, Detalle usa `detFiltro.mes`; mezclarlos deja `mesSel`
+    // en NaN la primera vez que se toca un mes desde Detalle).
+    [].forEach.call(document.querySelectorAll('.mchip[data-m]'), function (c) {
       c.addEventListener('click', function () { mesSel = Number(c.dataset.m); pintarPanel(); });
     });
     [].forEach.call(document.querySelectorAll('.sparkbar'), function (r) {
@@ -917,6 +1056,34 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
 
     var wrap = document.getElementById('evoWrap');
     if (wrap) conectarTooltip(wrap);
+
+    // ---- panel Detalle: filtros, orden, búsqueda ----
+    if (document.getElementById('detBody')) {
+      [].forEach.call(document.querySelectorAll('.mchip[data-dm]'), function (c) {
+        c.addEventListener('click', function () { detFiltro.mes = Number(c.dataset.dm); refrescarDetalle(); });
+      });
+      [].forEach.call(document.querySelectorAll('[data-dtipo]'), function (b) {
+        b.addEventListener('click', function () { detFiltro.tipo = b.dataset.dtipo; refrescarDetalle(); });
+      });
+      var selCat = document.getElementById('detCat');
+      if (selCat) selCat.addEventListener('change', function () { detFiltro.cat = selCat.value; refrescarDetalle(); });
+      var selMet = document.getElementById('detMet');
+      if (selMet) selMet.addEventListener('change', function () { detFiltro.metodo = selMet.value; refrescarDetalle(); });
+      var inpQ = document.getElementById('detQ');
+      if (inpQ) {
+        // A propósito NO pasa por pintarPanel() en cada tecla: eso reconstruye
+        // el <input> entero y le hace perder el foco a media palabra. Solo
+        // filtra en memoria y repinta el <tbody>.
+        inpQ.addEventListener('input', function () { detFiltro.q = inpQ.value; pintarDetalle(); });
+      }
+      [].forEach.call(document.querySelectorAll('[data-ord]'), function (th) {
+        th.addEventListener('click', function () { ordenarDetalle(th.dataset.ord); });
+        th.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ordenarDetalle(th.dataset.ord); }
+        });
+      });
+      if (!detFilas) cargarDetalle();
+    }
   }
 
   function conectarTooltip(wrap) {
