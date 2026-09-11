@@ -78,6 +78,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);font-s
 .led p{margin:7px 0 0;font-family:var(--mono);font-size:10px;color:var(--ink-3);line-height:1.4}
 .led.in dd{color:var(--pos)} .led.out dd{color:var(--neg)} .led.inv dd{color:var(--s3)} .led.sal dd{color:var(--s4)}
 .led.pat{background:var(--card-2);border-color:var(--ink-3)}
+.led.tgl{cursor:pointer;transition:border-color .16s,background .16s}
+.led.tgl:hover{border-color:var(--ink-3)}
+.led.tgl:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 .srcline{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin:10px 0 14px;line-height:1.7}
 .srcline b{color:var(--ink-2);font-weight:500}
 
@@ -295,6 +298,8 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
   var D = null;      // payload del API
   var mesSel = -1;   // -1 = general
   var modoEvo = 'mov';
+  var verFondo = false;     // tarjeta Invertido <-> Fondo de emergencia
+  var verLiquidez = false;  // tarjeta Neto <-> Liquidez
 
   // ---------- helpers svg ----------
   function svg(vb, contenido, aria) {
@@ -968,20 +973,34 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     var g = D.general, p = D.patrimonio;
     var cards = [
       { c: 'in', t: 'Ingresos', v: g.ing, s: D.porMes.length + ' meses' },
-      { c: 'out', t: 'Gastos', v: g.gas, s: g.n + ' movimientos' },
-      { c: 'inv', t: 'Invertido', v: D.invMes.length ? D.invMes[D.invMes.length - 1].acumulado : 0, s: 'acumulado' }
+      { c: 'out', t: 'Gastos', v: g.gas, s: g.n + ' movimientos' }
     ];
+
+    // Invertido <-> Fondo de emergencia comparten tarjeta, click/tap alterna.
+    // Los dos son APORTES acumulados (flujo), no el saldo real de la cuenta
+    // hoy — eso necesita la hoja Saldos, que todavía no existe.
+    cards.push(verFondo
+      ? { c: 'inv', t: 'Fondo de emergencia', v: g.ahorro, s: 'aportado · tocá para ver invertido', tgl: 'fondo' }
+      : { c: 'inv', t: 'Invertido', v: D.invMes.length ? D.invMes[D.invMes.length - 1].acumulado : 0, s: 'acumulado · tocá para ver fondo', tgl: 'fondo' });
+
     if (p.disponible) {
       p.cuentas.forEach(function (c) {
         if (!/invers/i.test(c.cuenta)) cards.push({ c: 'sal', t: c.cuenta, v: c.saldo, s: 'saldo al ' + c.fecha });
       });
       cards.push({ c: 'pat', t: 'Patrimonio hoy', v: p.total, s: 'todo lo que tenés' });
     } else {
-      cards.push({ c: '', t: 'Neto', v: g.neto, s: 'ingresos − gastos' });
+      // Neto <-> Liquidez comparten tarjeta. "Cerré el mes en positivo"
+      // (neto) y "tengo esa plata disponible" (liquidez) son afirmaciones
+      // distintas si una parte ya se fue a inversión o al fondo — ver el
+      // comentario de `liquidez` en server.js.
+      cards.push(verLiquidez
+        ? { c: '', t: 'Liquidez', v: g.liquidez, s: 'ing − gas − inv − ahorro · tocá para ver neto', tgl: 'liquidez' }
+        : { c: '', t: 'Neto', v: g.neto, s: 'ingresos − gastos · tocá para ver liquidez', tgl: 'liquidez' });
     }
     document.getElementById('ledger').innerHTML = cards.map(function (k) {
       var partes = nf.format(Math.abs(k.v)).split(',');
-      return '<div class="led ' + k.c + '"><dt>' + esc(k.t) + '</dt><dd>' + (k.v < 0 ? '−' : '') + '$' +
+      return '<div class="led ' + k.c + (k.tgl ? ' tgl' : '') + '"' + (k.tgl ? ' data-tgl="' + k.tgl + '" tabindex="0" role="button"' : '') +
+        '><dt>' + esc(k.t) + '</dt><dd>' + (k.v < 0 ? '−' : '') + '$' +
         partes[0] + '<span>,' + partes[1] + '</span></dd><p>' + esc(k.s) + '</p></div>';
     }).join('');
 
@@ -1172,6 +1191,26 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
   window.addEventListener('hashchange', function () {
     var nuevo = panelDeHash();
     if (nuevo !== activo) { activo = nuevo; pintarChips(); pintarPanel(); }
+  });
+
+  // Delegado sobre #ledger (nunca se destruye) en vez de bindear las
+  // tarjetas directo: pintarCabecera() reemplaza su innerHTML completo cada
+  // vez que se toggla, así que un listener puesto sobre la tarjeta misma se
+  // perdería en el primer click.
+  var ledgerEl = document.getElementById('ledger');
+  ledgerEl.addEventListener('click', function (e) {
+    var el = e.target.closest('.led.tgl');
+    if (!el) return;
+    if (el.dataset.tgl === 'fondo') verFondo = !verFondo;
+    if (el.dataset.tgl === 'liquidez') verLiquidez = !verLiquidez;
+    pintarCabecera();
+  });
+  ledgerEl.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var el = e.target.closest('.led.tgl');
+    if (!el) return;
+    e.preventDefault();
+    el.click();
   });
 
   document.getElementById('btnSync').addEventListener('click', function () {

@@ -111,10 +111,16 @@ app.get('/api/tipos', (_req, res) => {
 // con su handshake) que por una query un poco más grande. El front pide esto
 // una vez al cargar y arma todos los paneles con el mismo objeto.
 
-// Fila cargada como Ingreso pero que en realidad es el saldo con el que
-// arrancó el registro: no es plata que entró ese mes, y sin excluirla infla
-// el primer mes y arruina cualquier gráfico de ingresos.
-const NOTA_SALDO_INICIAL = /patrimonio actual/i;
+// Fila cargada como Ingreso (o Ahorro) que en realidad es una FOTO de saldo,
+// no plata que se movió ese día: "Patrimonio Actual" (el arranque del
+// registro, antes de que existiera la hoja Saldos) y "Ahorro fondo de
+// emergencia Actual" (mismo hack, para el fondo). Sin excluirlas se cuentan
+// como si fueran ingreso/aporte del período, e inflan cualquier total en
+// miles de dólares de una sola fila. Se detectan por el "Actual" en la nota
+// — convención ya usada dos veces en los datos reales, cero notas legítimas
+// de gasto/ingreso normal lo llevan (comprobado contra las 200+ filas de
+// este Sheet), así que no hace falta ser más específico.
+const NOTA_FOTO_SALDO = /\bactual\b/i;
 
 // Un gasto por encima de esto se trata como compra única y se muestra aparte:
 // mezclarlo con el gasto corriente hace que el promedio mienta.
@@ -143,6 +149,7 @@ function resumenDe(movs) {
   const ing = movs.filter((r) => r.tipo === 'Ingreso').reduce((a, r) => a + r.monto, 0);
   const gas = montos.reduce((a, b) => a + b, 0);
   const inv = movs.filter((r) => r.tipo === 'Inversión').reduce((a, r) => a + r.monto, 0);
+  const ahorro = movs.filter((r) => r.tipo === 'Ahorro').reduce((a, r) => a + r.monto, 0);
   const gasFijos = gastos.filter((r) => ES_GASTOS_FIJOS(r.categoria)).reduce((a, r) => a + r.monto, 0);
   const gasOtros = gas - gasFijos;
 
@@ -165,6 +172,13 @@ function resumenDe(movs) {
     ing: round2(ing),
     gas: round2(gas),
     inv: round2(inv),
+    ahorro: round2(ahorro),
+    // Lo que no se gastó, no se invirtió y no se apartó a ahorro: lo que
+    // queda de verdad en cuentas/efectivo. Distinto de `neto` (que solo
+    // resta gastos) — "cerré el mes en positivo" y "tengo esa plata
+    // disponible" son afirmaciones distintas si una parte ya se fue a
+    // inversión o al fondo de emergencia.
+    liquidez: round2(ing - gas - inv - ahorro),
     neto: round2(ing - gas),
     n: gastos.length,
     med: round2(mediana(montos)),
@@ -218,7 +232,7 @@ app.get('/api/dashboard', (_req, res) => {
   //
   // La fecha 2025 de un movimiento viejo (ver Decisiones, nota "Fecha 2025")
   // se resuelve arreglando el dato en el Sheet, no filtrando fechas acá.
-  const flujos = todos.filter((r) => !NOTA_SALDO_INICIAL.test(r.nota || ''));
+  const flujos = todos.filter((r) => !NOTA_FOTO_SALDO.test(r.nota || ''));
 
   const meses = [...new Set(flujos.map((r) => r.fecha.slice(0, 7)))].sort();
   const hoy = new Date().toISOString().slice(0, 10);
