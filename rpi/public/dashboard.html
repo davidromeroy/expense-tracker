@@ -1001,8 +1001,17 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
       // (neto) y "tengo esa plata disponible" (liquidez) son afirmaciones
       // distintas si una parte ya se fue a inversión o al fondo — ver el
       // comentario de `liquidez` en server.js.
+      //
+      // OJO con el subtítulo: dice "aportes ahorro", no "fondo", a propósito.
+      // Reportado: alguien restó a mano Neto − Invertido − Fondo de
+      // emergencia (usando el TOTAL que muestra esa tarjeta, semilla vieja
+      // incluida) y no daba lo mismo que Liquidez — porque Liquidez resta
+      // solo los aportes de ahorro DEL PERÍODO, no el total acumulado. Las
+      // dos tarjetas miden cosas distintas del mismo dato a propósito (ver
+      // fondoEmergenciaTotal en server.js), pero eso invita justo a esa
+      // resta cruzada. "Aportes ahorro" en vez de "ahorro" a solas.
       cards.push(verLiquidez
-        ? { c: '', t: 'Liquidez', v: g.liquidez, s: 'ing − gas − inv − ahorro · tocá para ver neto', tgl: 'liquidez' }
+        ? { c: '', t: 'Liquidez', v: g.liquidez, s: 'ing − gas − inv − aportes ahorro · tocá para ver neto', tgl: 'liquidez' }
         : { c: '', t: 'Neto', v: g.neto, s: 'ingresos − gastos · tocá para ver liquidez', tgl: 'liquidez' });
     }
     document.getElementById('ledger').innerHTML = cards.map(function (k) {
