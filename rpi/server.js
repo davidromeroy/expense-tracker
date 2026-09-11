@@ -225,10 +225,25 @@ app.get('/api/dashboard', (_req, res) => {
   // vivos en la base pero invisibles en el dashboard.)
   //
   // La fecha 2025 de un movimiento viejo (ver Decisiones, nota "Fecha 2025")
-  // se resuelve arreglando el dato en el Sheet, no filtrando fechas acá.
+  // resultó ser un dato REAL, no un typo — una inversión hecha antes de
+  // empezar a trackear (confirmado con el usuario). Sigue sumando en los
+  // totales de siempre (Invertido, Patrimonio, Liquidez — para eso usan
+  // `flujos`/`generalBase` sin este filtro), pero no tiene que aparecer
+  // como un mes suelto, un año antes de todo lo demás, en los gráficos
+  // mensuales (Neto mensual, Ingresos, Resumen). `fechaInicioTracking` es
+  // la fecha de la semilla de patrimonio — todo lo anterior a eso se
+  // considera "de antes de trackear" y no arma su propio mes.
   const flujos = todos.filter((r) => !NOTA_FOTO_SALDO.test(r.nota || ''));
 
-  const meses = [...new Set(flujos.map((r) => r.fecha.slice(0, 7)))].sort();
+  const fechaInicioTracking = todos
+    .filter((r) => r.tipo === 'Ingreso' && NOTA_FOTO_SALDO.test(r.nota || ''))
+    .reduce((min, r) => (!min || r.fecha < min ? r.fecha : min), null);
+
+  const meses = [...new Set(
+    flujos
+      .filter((r) => !fechaInicioTracking || r.fecha >= fechaInicioTracking)
+      .map((r) => r.fecha.slice(0, 7))
+  )].sort();
   const hoy = new Date().toISOString().slice(0, 10);
   const mesEnCurso = hoy.slice(0, 7);
 
@@ -317,10 +332,18 @@ app.get('/api/dashboard', (_req, res) => {
   });
 
   const inversiones = flujos.filter((r) => r.tipo === 'Inversión');
+  // Aportes de inversión de ANTES de fechaInicioTracking (ej. la compra de
+  // MSFT de 2025) no tienen mes en `meses`, así que el .map() de abajo
+  // nunca los va a sumar — sin esto, ese aporte real desaparecía del
+  // acumulado en vez de solo dejar de tener su propio mes. Se suman acá,
+  // como semilla, junto con lo que ya viniera de la hoja Saldos.
+  const inversionesPrevias = round2(
+    inversiones.filter((r) => !meses.includes(r.fecha.slice(0, 7))).reduce((a, r) => a + r.monto, 0)
+  );
   let acumulado = round2(
     [...aperturaPorCuenta.values()]
       .filter((s) => s.fecha === fechaApertura && /invers/i.test(s.cuenta))
-      .reduce((a, s) => a + s.saldo, 0)
+      .reduce((a, s) => a + s.saldo, 0) + inversionesPrevias
   );
   const invMes = meses.map((mes) => {
     const aporte = round2(
