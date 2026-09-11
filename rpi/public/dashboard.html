@@ -988,7 +988,7 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     // Los dos son APORTES acumulados (flujo), no el saldo real de la cuenta
     // hoy — eso necesita la hoja Saldos, que todavía no existe.
     cards.push(verFondo
-      ? { c: 'inv', t: 'Fondo de emergencia', v: g.ahorro, s: 'aportado · tocá para ver invertido', tgl: 'fondo' }
+      ? { c: 'inv', t: 'Fondo de emergencia', v: g.fondoEmergenciaTotal, s: 'acumulado · tocá para ver invertido', tgl: 'fondo' }
       : { c: 'inv', t: 'Invertido', v: D.invMes.length ? D.invMes[D.invMes.length - 1].acumulado : 0, s: 'acumulado · tocá para ver fondo', tgl: 'fondo' });
 
     if (p.disponible) {
