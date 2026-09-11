@@ -251,6 +251,17 @@ app.get('/api/dashboard', (_req, res) => {
   const gastos = flujos.filter((r) => r.tipo === 'Gasto');
   const generalBase = resumenDe(flujos);
 
+  // Fondo de emergencia TOTAL (para la tarjeta) es otra pregunta que
+  // `generalBase.ahorro` (aportes del período, usado en `liquidez`): acá SÍ
+  // hay que contar la fila "Actual" — es la semilla de lo que ya tenías
+  // ahorrado antes de trackear, misma idea que `patrimonioInicial` para el
+  // patrimonio. Sin ella, la tarjeta muestra solo los aportes nuevos y
+  // esconde la plata que de verdad hay guardada. Se suma sobre `todos`, no
+  // `flujos`, justamente para NO pasar por el filtro que la excluye.
+  const fondoEmergenciaTotal = round2(
+    todos.filter((r) => r.tipo === 'Ahorro').reduce((a, r) => a + r.monto, 0)
+  );
+
   const porCategoria = [...gastos.reduce((map, r) => {
     const c = map.get(r.categoria) || { categoria: r.categoria, total: 0, n: 0, unico: 0 };
     c.total += r.monto;
@@ -353,6 +364,7 @@ app.get('/api/dashboard', (_req, res) => {
     },
     general: {
       ...generalBase,
+      fondoEmergenciaTotal,
       mesMasCaro: cerrados.reduce((a, m) => (!a || m.gas > a.gas ? m : a), null),
       mesMasBarato: cerrados.reduce((a, m) => (!a || m.gas < a.gas ? m : a), null),
     },
