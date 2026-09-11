@@ -385,6 +385,7 @@ app.get('/api/dashboard', (_req, res) => {
     general: {
       ...generalBase,
       fondoEmergenciaTotal,
+      patrimonioTotalMov,
       liquidez,
       mesMasCaro: cerrados.reduce((a, m) => (!a || m.gas > a.gas ? m : a), null),
       mesMasBarato: cerrados.reduce((a, m) => (!a || m.gas < a.gas ? m : a), null),

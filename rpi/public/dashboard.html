@@ -1000,15 +1000,17 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
       });
       cards.push({ c: 'pat', t: 'Patrimonio hoy', v: p.total, s: 'todo lo que tenés' });
     } else {
-      // Neto <-> Liquidez comparten tarjeta. Neto es flujo puro del período
-      // (ingresos − gastos, sin semilla). Liquidez es otra cosa: patrimonio
-      // total (semilla de enero + todo lo que entró y salió) menos lo que
-      // ya está en Invertido/Fondo — lo único que puede quedar en
-      // banco/efectivo. Fórmula completa y por qué la semilla importa: ver
-      // el comentario de `patrimonioInicialMov`/`liquidez` en server.js.
+      // Patrimonio <-> Liquidez comparten tarjeta. Patrimonio (antes decía
+      // "Neto") es semilla de enero + todo lo que entró y salió — tu
+      // riqueza total, plata en cualquier cuenta. Liquidez es esa misma
+      // plata MENOS lo que ya está en Invertido/Fondo — lo único que puede
+      // quedar en banco/efectivo. Reportado: mostrar acá el flujo puro
+      // (ingresos − gastos, sin semilla) confundía con patrimonio total —
+      // esa cuenta sigue viva en la pestaña "Neto mensual", que sí necesita
+      // el flujo puro por mes; acá no.
       cards.push(verLiquidez
-        ? { c: 'liq', t: 'Liquidez', v: g.liquidez, s: 'patrimonio − invertido − fondo · tocá para ver neto', tgl: 'liquidez' }
-        : { c: '', t: 'Neto', v: g.neto, s: 'ingresos − gastos · tocá para ver liquidez', tgl: 'liquidez' });
+        ? { c: 'liq', t: 'Liquidez', v: g.liquidez, s: 'patrimonio − invertido − fondo · tocá para ver patrimonio', tgl: 'liquidez' }
+        : { c: '', t: 'Patrimonio', v: g.patrimonioTotalMov, s: 'semilla + ingresos − gastos · tocá para ver liquidez', tgl: 'liquidez' });
     }
     document.getElementById('ledger').innerHTML = cards.map(function (k) {
       var partes = nf.format(Math.abs(k.v)).split(',');
