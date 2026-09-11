@@ -188,14 +188,20 @@ th.ord:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
 .specs dd{margin:0;font-family:var(--dsp);font-weight:700;font-size:14.5px;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
 .specs dd em{font-style:normal;font-family:var(--ui);font-weight:500;font-size:12px;color:var(--ink-3)}
 
-table{border-collapse:collapse;width:100%;font-size:13px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
 .tablewrap{overflow-x:auto;padding:6px 20px 0}
-th,td{padding:7px 10px;border-bottom:1px solid var(--line-2);text-align:right;white-space:nowrap}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line-2);text-align:right;white-space:nowrap}
 th:first-child,td:first-child{text-align:left;padding-left:0;white-space:normal}
 td:last-child,th:last-child{padding-right:0}
 thead th{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:500;border-bottom:1px solid var(--line)}
-td.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+td.num{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums}
 tbody tr:last-child td{border-bottom:none}
+/* Nota (Detalle): antes nowrap, empujaba la tabla a un scroll horizontal
+   larguísimo con una sola nota ocupando media pantalla de ancho. Ahora
+   envuelve en varias líneas, ancho acotado, letra más chica y atenuada —
+   es contexto de apoyo, no el dato principal de la fila. */
+td.nota{white-space:normal;text-align:left;max-width:220px;font-size:11.5px;color:var(--ink-2);line-height:1.4}
+@media (max-width:520px){ td.nota{max-width:150px} }
 
 .state{padding:44px 20px;text-align:center;color:var(--ink-2)}
 .state h2{font-family:var(--dsp);font-size:18px;margin:0 0 8px;color:var(--ink)}
@@ -685,13 +691,31 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
 
   // ---------- panel: patrimonio ----------
   function panelPatrimonio() {
-    var p = D.patrimonio;
+    var p = D.patrimonio, g = D.general;
     if (!p.disponible) {
-      return '<section class="panel"><div class="state"><h2>Falta la hoja «Saldos»</h2>' +
-        '<p>El patrimonio necesita saber con cuánto arrancaste y cuánto hay hoy en cada cuenta. ' +
-        'Creá en tu Google Sheet una hoja llamada <code>Saldos</code> con tres columnas ' +
-        '(<code>fecha</code>, <code>cuenta</code>, <code>saldo</code>) y una fila por foto de saldo. ' +
-        'El sync la toma sola en la próxima corrida.</p></div></section>';
+      // Sin la hoja Saldos no hay saldo real de cuenta que mostrar, pero SÍ
+      // hay algo mejor que la pantalla vacía de antes: el mismo desglose que
+      // ya arma la cabecera (Invertido/Fondo/Liquidez), listado junto en vez
+      // de repartido en dos tarjetas que alternan.
+      var invertido = D.invMes.length ? D.invMes[D.invMes.length - 1].acumulado : 0;
+      var total = g.patrimonioTotalMov || 1;
+      var partes = [
+        { nm: 'Invertido', v: invertido, c: '--s3' },
+        { nm: 'Fondo de emergencia', v: g.fondoEmergenciaTotal, c: '--s4' },
+        { nm: 'Liquidez (banco / efectivo)', v: g.liquidez, c: '--s1' }
+      ];
+      var filas = partes.map(function (x) {
+        return '<div class="row"><span class="sw" style="background:var(' + x.c + ')"></span>' +
+          '<span class="nm">' + esc(x.nm) + '</span><span class="amt">' + money(x.v) + '</span>' +
+          '<span class="pct">' + pct(x.v / total * 100) + '</span></div>';
+      }).join('');
+      return '<section class="panel">' +
+        '<div class="phead"><h2>Cuánto tenés, y dónde está</h2><span class="tag">' + money0(g.patrimonioTotalMov) + '</span></div>' +
+        '<div class="catlist" style="padding:16px 20px 0">' + filas + '</div>' +
+        '<div class="read"><b>Esto es un cálculo, no tu saldo real de cuenta.</b> Invertido y Fondo de emergencia suman lo que ' +
+        'registraste como movimiento (más la semilla que cargaste a mano) — si tu inversión ganó rentabilidad, o algún gasto no se ' +
+        'registró, este número no lo sabe. Creá una hoja <code>Saldos</code> (<code>fecha | cuenta | saldo</code>) en el Sheet para ' +
+        'reemplazar esta aproximación por tu saldo real, cargado a mano cuando quieras actualizar la foto.</div></section>';
     }
     var ing = D.general.ing, gas = D.general.gas;
     var pico = p.inicial + ing;
@@ -922,7 +946,7 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     body.innerHTML = ordenadas.length
       ? ordenadas.map(function (r) {
           return '<tr><td>' + esc(r.fecha) + '</td><td>' + esc(r.categoria) + '</td><td>' + esc(r.metodo_pago || '—') +
-            '</td><td>' + esc(r.nota || '') + '</td><td class="num">' + money(r.monto) + '</td></tr>';
+            '</td><td class="nota">' + esc(r.nota || '') + '</td><td class="num">' + money(r.monto) + '</td></tr>';
         }).join('')
       : '<tr><td colspan="5" class="detmsg">Nada con estos filtros.</td></tr>';
   }
