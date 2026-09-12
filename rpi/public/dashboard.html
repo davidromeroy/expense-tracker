@@ -984,8 +984,7 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
   function panelPreguntas() {
     var hist = preguntasHist.map(function (h) {
       return '<div class="qa"><p class="q">' + esc(h.pregunta) + '</p>' +
-        '<div class="a">' + esc(h.respuesta) +
-        (h.sql ? '<code class="sql">' + esc(h.sql) + '</code>' : '') + '</div></div>';
+        '<div class="a">' + esc(h.respuesta) + '</div></div>';
     }).join('');
 
     return '<section class="panel">' +
@@ -1266,7 +1265,15 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     document.getElementById('paneles').innerHTML =
       '<div class="panel"><div class="state"><h2>' + esc(titulo) + '</h2><p>' + detalle +
       '</p><button type="button" id="reintentar">Reintentar</button></div></div>';
-    document.getElementById('reintentar').addEventListener('click', cargar);
+    // OJO: `cargar` recibe `intento` como primer parámetro — pasarla
+    // directo como handler de 'click' le mete el objeto Event ahí (todo
+    // listener de click recibe el evento), lo que rompe
+    // `intento < REINTENTOS_AUTO.length` (un Event nunca es menor que un
+    // número) y hacía que el botón manual perdiera toda la cascada de
+    // reintentos automáticos: un solo intento seco por click, directo al
+    // error de nuevo si fallaba. Bug real, reportado: "debo intentar un
+    // par de veces" — cada click debería haber vuelto a probar ~25s solo.
+    document.getElementById('reintentar').addEventListener('click', function () { cargar(); });
   }
 
   // Al volver de background/sleep (cerrar la pestaña o el navegador y volver
@@ -1275,7 +1282,15 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
   // vez de tirar el panel de error al primer intento, reintenta solo un par
   // de veces con espera creciente; recién si sigue sin conectar después de
   // eso se muestra el error real con el botón manual.
-  var REINTENTOS_AUTO = [1500, 3000, 6000]; // ms de espera antes de cada reintento
+  //
+  // Reportado (2026-09-12): la ventana original (1.5+3+6=10.5s) se quedaba
+  // corta en la práctica — el usuario seguía teniendo que tocar "Reintentar"
+  // a mano un par de veces después de que se rendía sola, cada una
+  // arrancando de cero otros 10.5s. Estirado a ~30s de reintento automático
+  // antes de mostrar el botón manual — sigue habiendo un techo (no reintenta
+  // para siempre), pero cubre una reconexión lenta real sin que el usuario
+  // tenga que tocar nada.
+  var REINTENTOS_AUTO = [1500, 3000, 5000, 8000, 8000]; // ms de espera antes de cada reintento (~25.5s total)
 
   function cargar(intento) {
     intento = intento || 0;
