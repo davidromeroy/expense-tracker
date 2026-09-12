@@ -91,7 +91,31 @@ function isSafeSelect(sql) {
   return trimmed;
 }
 
+// El tier gratis de Gemini da 20 requests/día por proyecto, y cada
+// pregunta gasta 2 (generar el SQL + redactar la respuesta) — así que a
+// las ~10 preguntas reales del día, Gemini empieza a tirar 429
+// RESOURCE_EXHAUSTED con un mensaje JSON crudo feo. `askQuestion()` de
+// afuera atrapa eso puntual y devuelve un aviso legible en vez de dejarlo
+// pasar tal cual al usuario — cualquier OTRO error (de red, de la propia
+// consulta SQL, etc.) sigue subiendo normal.
+const CUOTA_AGOTADA = /RESOURCE_EXHAUSTED|429|exceeded your current quota/i;
+
 async function askQuestion(pregunta) {
+  try {
+    return await askQuestionInner(pregunta);
+  } catch (err) {
+    if (CUOTA_AGOTADA.test(err.message || '')) {
+      return {
+        respuesta: 'Se acabó la cuota gratis de Gemini por hoy (20 consultas/día, se resetea a las 24hs). ' +
+          'Probá de nuevo mañana, o mientras tanto usá los filtros de la pestaña Detalle.',
+        filas: [],
+      };
+    }
+    throw err;
+  }
+}
+
+async function askQuestionInner(pregunta) {
   const today = new Date().toISOString().slice(0, 10);
   const ai = await getAi();
 
