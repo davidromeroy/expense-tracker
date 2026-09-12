@@ -142,6 +142,21 @@ th.ord.on{color:var(--ink)}
 th.ord:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
 .detmsg{text-align:center!important;padding:22px 10px!important;color:var(--ink-3);font-size:13px;white-space:normal!important}
 
+.ask{display:flex;gap:9px;padding:16px 20px 0;align-items:flex-start}
+.ask textarea{flex:1;font-family:var(--ui);font-size:13.5px;color:var(--ink);background:var(--card-2);
+  border:1px solid var(--line);border-radius:10px;padding:9px 12px;resize:vertical;min-height:38px}
+.ask textarea:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+.ask button{font-family:var(--ui);font-weight:600;font-size:13px;padding:9px 16px;border-radius:9px;
+  border:1px solid var(--brand);background:var(--brand);color:#fff;cursor:pointer;white-space:nowrap;align-self:stretch}
+.ask button:disabled{opacity:.6;cursor:default}
+.ask button:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+#askHist{display:flex;flex-direction:column;gap:10px;padding:14px 20px 0}
+.qa{background:var(--sunk);border-radius:11px;padding:12px 14px}
+.qa .q{margin:0 0 6px;font-weight:700;font-size:13.5px;color:var(--ink)}
+.qa .a{font-size:13.5px;color:var(--ink-2);line-height:1.5}
+.qa .sql{display:block;margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--ink-3);
+  white-space:pre-wrap;word-break:break-word}
+
 .mesbar{display:flex;gap:6px;overflow-x:auto;padding:10px 20px 2px;scrollbar-width:none}
 .mesbar::-webkit-scrollbar{display:none}
 .mchip{flex:0 0 auto;font-family:var(--ui);font-size:12px;font-weight:600;padding:6px 12px;min-height:32px;border-radius:8px;
@@ -960,6 +975,62 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     pintarDetalle(); // reordena lo que ya está en memoria, sin pedirle nada al server
   }
 
+  // ---------- panel: preguntas (chatbot, Fase 4) ----------
+  // Capa de lenguaje natural sobre /api/preguntar (chatbot.js, Gemini). No
+  // reemplaza los filtros de Detalle — es para preguntas que no calzan en
+  // un formulario fijo ("¿en qué mes gasté más en el último año?").
+  var preguntasHist = []; // [{pregunta, respuesta, sql}], solo en memoria, se pierde al recargar
+
+  function panelPreguntas() {
+    var hist = preguntasHist.map(function (h) {
+      return '<div class="qa"><p class="q">' + esc(h.pregunta) + '</p>' +
+        '<div class="a">' + esc(h.respuesta) +
+        (h.sql ? '<code class="sql">' + esc(h.sql) + '</code>' : '') + '</div></div>';
+    }).join('');
+
+    return '<section class="panel">' +
+      '<div class="phead"><h2>Preguntale a tus datos</h2><span class="tag">beta · Gemini</span></div>' +
+      '<div class="ask">' +
+        '<textarea id="askInput" rows="2" placeholder="¿Cuánto gasté en Alimentos en julio?"></textarea>' +
+        '<button type="button" id="askBtn">Preguntar</button>' +
+      '</div>' +
+      '<div id="askHist">' + hist + '</div>' +
+      '<div class="read">Esto traduce tu pregunta a una consulta de solo lectura contra tus movimientos reales y responde con el resultado — no es una IA que "sepa" tus finanzas de memoria, cada respuesta viene de una query fresca. No reemplaza los filtros de <b>Detalle</b>, es para lo que no entra en un formulario fijo.</div></section>';
+  }
+
+  function preguntar() {
+    var input = document.getElementById('askInput'), btn = document.getElementById('askBtn');
+    var pregunta = input.value.trim();
+    if (!pregunta) return;
+
+    btn.disabled = true; btn.textContent = 'Pensando…';
+    fetch('api/preguntar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pregunta: pregunta }),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        preguntasHist.unshift({
+          pregunta: pregunta,
+          respuesta: res.ok ? res.j.respuesta : ('Error: ' + (res.j.error || 'algo salió mal')),
+          sql: res.j.sql,
+        });
+        input.value = '';
+        pintarPanel();
+      })
+      .catch(function (err) {
+        preguntasHist.unshift({ pregunta: pregunta, respuesta: 'No se pudo conectar: ' + err.message });
+        pintarPanel();
+      })
+      .finally(function () {
+        // pintarPanel() ya reconstruyó el botón — este objeto quedó viejo,
+        // pero re-habilitarlo no hace daño y cubre el caso de error antes
+        // de que pintarPanel() corra.
+        btn.disabled = false; btn.textContent = 'Preguntar';
+      });
+  }
+
   // ---------- render ----------
   var PANELES = [
     { id: 'resumen', nom: 'Resumen', fn: panelResumen },
@@ -970,7 +1041,8 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     { id: 'inv', nom: 'Inversiones', fn: panelInversiones },
     { id: 'pat', nom: 'Patrimonio', fn: panelPatrimonio },
     { id: 'evo', nom: 'Evolución', fn: panelEvolucion },
-    { id: 'detalle', nom: 'Detalle', fn: panelDetalle }
+    { id: 'detalle', nom: 'Detalle', fn: panelDetalle },
+    { id: 'preguntas', nom: 'Preguntas', fn: panelPreguntas }
   ];
   // El panel abierto vive en el hash SOLO para que un link explícito
   // (#patrimonio) abra directo en esa vista. Deliberadamente NO se usa para
@@ -1143,6 +1215,16 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
         });
       });
       if (!detFilas) cargarDetalle();
+    }
+
+    // ---- panel Preguntas ----
+    var askBtn = document.getElementById('askBtn');
+    if (askBtn) {
+      askBtn.addEventListener('click', preguntar);
+      document.getElementById('askInput').addEventListener('keydown', function (e) {
+        // Enter envía, Shift+Enter hace salto de línea (textarea normal).
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); preguntar(); }
+      });
     }
   }
 
