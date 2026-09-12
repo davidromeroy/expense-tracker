@@ -29,7 +29,13 @@
 // no reimportar en cada pregunta.
 const { db } = require('./db');
 
-const MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+// gemini-3.6-flash agotó su cuota gratis (20 req/día) el 2026-09-12 con muy
+// poco uso real de por medio. gemini-3.5-flash-lite tiene cuota separada
+// (probado: no tiró 429 con la de -3.6 ya en cero) y respondió bien contra
+// datos reales — no hay tabla pública de cuánto es exacto, Google lo
+// muestra solo en el dashboard de AI Studio de cada cuenta. Cambiar acá si
+// hace falta otro modelo, sin tocar el resto del archivo.
+const MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 
 let aiPromise = null;
 let Type = null; // solo válido después de resolver getAi() una vez
