@@ -20,7 +20,7 @@
 - Modify: `rpi/server.js` (agregar ruta nueva, después de la ruta `/api/preguntar` existente en la línea ~445)
 - Modify: `rpi/.env.example` (agregar `ALEXA_SHARED_SECRET`)
 
-- [ ] **Step 1: Agregar `ALEXA_SHARED_SECRET` a `.env.example`**
+- [x] **Step 1: Agregar `ALEXA_SHARED_SECRET` a `.env.example`**
 
 Editar `rpi/.env.example`, agregar después de la línea de `GEMINI_MODEL`:
 
@@ -31,7 +31,7 @@ Editar `rpi/.env.example`, agregar después de la línea de `GEMINI_MODEL`:
 ALEXA_SHARED_SECRET=
 ```
 
-- [ ] **Step 2: Escribir la ruta, solo con el chequeo de secreto (sin lógica real todavía)**
+- [x] **Step 2: Escribir la ruta, solo con el chequeo de secreto (sin lógica real todavía)**
 
 En `rpi/server.js`, agregar esto inmediatamente después del cierre del bloque `app.post('/api/preguntar', ...)` (después de la línea ~445, antes de `app.post('/api/sync', ...)`):
 
@@ -62,7 +62,7 @@ app.post('/api/alexa', async (req, res) => {
 });
 ```
 
-- [ ] **Step 3: Levantar el server local y probar que rechaza sin secreto**
+- [x] **Step 3: Levantar el server local y probar que rechaza sin secreto**
 
 ```bash
 cd rpi
@@ -85,7 +85,7 @@ curl -s -o /dev/null -w "HTTP %{http_code}\n" -X POST http://localhost:3000/api/
 
 Esperado: `HTTP 401` (sin header `x-alexa-secret`, el chequeo rechaza).
 
-- [ ] **Step 4: Probar que acepta con el secreto correcto**
+- [x] **Step 4: Probar que acepta con el secreto correcto**
 
 ```bash
 curl -s -X POST http://localhost:3000/api/alexa \
@@ -98,7 +98,7 @@ Esperado:
 {"version":"1.0","response":{"outputSpeech":{"type":"PlainText","text":"Endpoint vivo, todavía sin lógica real."},"shouldEndSession":true}}
 ```
 
-- [ ] **Step 5: Reemplazar el stub por la lógica real — leer la pregunta del shape de Alexa y llamar a `askQuestion()`**
+- [x] **Step 5: Reemplazar el stub por la lógica real — leer la pregunta del shape de Alexa y llamar a `askQuestion()`**
 
 Reemplazar el cuerpo de la ruta agregada en el Step 2 completo por:
 
@@ -142,7 +142,7 @@ app.post('/api/alexa', async (req, res) => {
 });
 ```
 
-- [ ] **Step 6: Probar con una pregunta real, simulando el shape exacto de Alexa**
+- [x] **Step 6: Probar con una pregunta real, simulando el shape exacto de Alexa**
 
 ```bash
 curl -s -X POST http://localhost:3000/api/alexa \
@@ -165,7 +165,7 @@ Esperado (el monto real depende de tus datos sincronizados, pero la forma es est
 {"version":"1.0","response":{"outputSpeech":{"type":"PlainText","text":"En total gastaste $6.965,62."},"shouldEndSession":true}}
 ```
 
-- [ ] **Step 7: Probar el caso de pregunta vacía/sin slot**
+- [x] **Step 7: Probar el caso de pregunta vacía/sin slot**
 
 ```bash
 curl -s -X POST http://localhost:3000/api/alexa \
@@ -176,14 +176,14 @@ curl -s -X POST http://localhost:3000/api/alexa \
 
 Esperado: `{"version":"1.0","response":{"outputSpeech":{"type":"PlainText","text":"No entendí la pregunta, probá de nuevo."},"shouldEndSession":true}}`
 
-- [ ] **Step 8: Apagar el server local y limpiar**
+- [x] **Step 8: Apagar el server local y limpiar**
 
 ```bash
 kill %1
 rm -f .env movimientos.db movimientos.db-shm movimientos.db-wal
 ```
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /Users/liris/Desktop/David/David/expense-tracker
