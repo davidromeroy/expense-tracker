@@ -444,6 +444,54 @@ app.post('/api/preguntar', async (req, res) => {
   }
 });
 
+// --- Alexa Skill "finanzas" — único endpoint pensado para exponerse a
+// internet (vía Tailscale Funnel, configurado a nivel de SO, no acá).
+// Todo lo demás de este archivo sigue exclusivamente detrás de Tailscale.
+//
+// Ojo con el fail-open: si ALEXA_SHARED_SECRET no está seteado en .env,
+// `process.env.ALEXA_SHARED_SECRET` es `undefined`, y un request sin
+// header también da `undefined` — comparar undefined !== undefined es
+// `false`, o sea que SIN secreto configurado, CUALQUIERA pasaría. Por eso
+// el chequeo exige explícitamente que `secreto` exista, no solo que
+// coincida.
+app.post('/api/alexa', async (req, res) => {
+  const secreto = process.env.ALEXA_SHARED_SECRET;
+  if (!secreto || req.headers['x-alexa-secret'] !== secreto) {
+    return res.status(401).json({ error: 'no autorizado' });
+  }
+
+  // Shape real de un IntentRequest de Alexa (ver el modelo de interacción
+  // del Custom Skill): la pregunta transcripta vive en
+  // request.intent.slots.query.value — el nombre "query" viene del slot
+  // AMAZON.SearchQuery definido en el Skill.
+  const slots = req.body && req.body.request && req.body.request.intent && req.body.request.intent.slots;
+  const pregunta = slots && slots.query && slots.query.value;
+
+  function hablar(texto) {
+    res.json({
+      version: '1.0',
+      response: {
+        outputSpeech: { type: 'PlainText', text: texto },
+        shouldEndSession: true,
+      },
+    });
+  }
+
+  if (!pregunta) {
+    return hablar('No entendí la pregunta, probá de nuevo.');
+  }
+
+  try {
+    const resultado = await askQuestion(pregunta);
+    hablar(resultado.respuesta);
+  } catch (err) {
+    // askQuestion() ya atrapa el caso de cuota agotada de Gemini y devuelve
+    // texto legible en vez de tirar — esto solo cubre errores realmente
+    // inesperados (red caída, etc.), ver chatbot.js.
+    hablar('Hubo un error consultando tus datos: ' + err.message);
+  }
+});
+
 // --- Sync manual (útil para probar sin esperar al cron) ---
 app.post('/api/sync', async (_req, res) => {
   try {
