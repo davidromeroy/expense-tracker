@@ -8,6 +8,10 @@ require('dotenv').config();
 const path = require('path');
 const express = require('express');
 const cron = require('node-cron');
+// v4 se publica transpileado desde ESM — require() normal da el objeto
+// módulo entero (con __esModule: true), no la función; hay que desenvolver
+// el default a mano, CommonJS no lo hace solo como sí hace Babel/webpack.
+const alexaVerifier = require('alexa-verifier').default;
 const { db, getMeta } = require('./db');
 const { syncOnce } = require('./sync');
 const { askQuestion } = require('./chatbot');
@@ -16,7 +20,16 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const SYNC_INTERVAL_MIN = Number(process.env.SYNC_INTERVAL_MIN || 15);
 
-app.use(express.json());
+// El `verify` guarda el body crudo (bytes exactos, antes de parsear) en
+// req.rawBody — lo necesita alexaVerifier() más abajo, porque la firma de
+// Alexa se calcula sobre el texto tal cual llegó, no sobre el objeto
+// reconstruido por JSON.parse (el orden/espaciado de un JSON.stringify
+// propio no es necesariamente igual al original).
+app.use(express.json({
+  verify: (req, _res, buf) => {
+    req.rawBody = buf.toString('utf8');
+  },
+}));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // --- Filtros básicos (el camino principal y más confiable) ---
@@ -448,25 +461,69 @@ app.post('/api/preguntar', async (req, res) => {
 // internet (vía Tailscale Funnel, configurado a nivel de SO, no acá).
 // Todo lo demás de este archivo sigue exclusivamente detrás de Tailscale.
 //
-// Ojo con el fail-open: si ALEXA_SHARED_SECRET no está seteado en .env,
-// `process.env.ALEXA_SHARED_SECRET` es `undefined`, y un request sin
-// header también da `undefined` — comparar undefined !== undefined es
-// `false`, o sea que SIN secreto configurado, CUALQUIERA pasaría. Por eso
-// el chequeo exige explícitamente que `secreto` exista, no solo que
-// coincida.
-//
 // Ojo con `tailscale funnel --set-path=/api/alexa`: pela el prefijo al
 // proxyear, la request le llega al backend como POST / (no POST
-// /api/alexa). Por eso el handler está montado en ambas rutas — '/' es la
-// que realmente usa Funnel, '/api/alexa' queda para pegarle directo desde
-// dentro del tailnet (curl de prueba, etc). POST a '/' no choca con nada:
-// no hay ningún otro handler POST en esa ruta, solo GET/estático.
-async function manejarPreguntaAlexa(req, res) {
+// /api/alexa). Por eso hay DOS rutas con DOS autenticaciones distintas:
+//
+//   POST /api/alexa  — solo alcanzable dentro del tailnet (Funnel no la
+//                       expone tal cual). Gateada por ALEXA_SHARED_SECRET
+//                       en un header — sirve para probar con curl a mano.
+//   POST /            — la que realmente pega Funnel desde internet. Un
+//                       header custom no sirve acá: la consola de Alexa no
+//                       deja configurar headers en un endpoint HTTPS
+//                       propio. En su lugar se verifica la FIRMA que Alexa
+//                       manda en todo request real (headers Signature +
+//                       SignatureCertChainUrl, estándar, no custom) — si
+//                       no verifica, no es Alexa quien preguntó.
+//
+// POST a '/' no choca con nada más: no hay ningún otro handler POST en esa
+// ruta, solo GET/estático.
+
+function requiereSecretoCompartido(req, res, next) {
+  // Ojo con el fail-open: si ALEXA_SHARED_SECRET no está seteado en .env,
+  // `process.env.ALEXA_SHARED_SECRET` es `undefined`, y un request sin
+  // header también da `undefined` — comparar undefined !== undefined es
+  // `false`, o sea que SIN secreto configurado, CUALQUIERA pasaría. Por eso
+  // el chequeo exige explícitamente que `secreto` exista, no solo que
+  // coincida.
   const secreto = process.env.ALEXA_SHARED_SECRET;
   if (!secreto || req.headers['x-alexa-secret'] !== secreto) {
     return res.status(401).json({ error: 'no autorizado' });
   }
+  next();
+}
 
+// Tolerancia estándar recomendada por Amazon para el timestamp del
+// request (ver Alexa docs de "request validation") — más viejo que esto,
+// se rechaza como posible replay de una request capturada antes.
+const TOLERANCIA_TIMESTAMP_MS = 150 * 1000;
+
+function requiereFirmaAlexa(req, res, next) {
+  const certUrl = req.headers.signaturecertchainurl;
+  const firma = req.headers.signature;
+  const timestamp = req.body && req.body.request && req.body.request.timestamp;
+
+  if (!certUrl || !firma || !req.rawBody || !timestamp) {
+    return res.status(401).json({ error: 'no autorizado' });
+  }
+  if (Math.abs(Date.now() - new Date(timestamp).getTime()) > TOLERANCIA_TIMESTAMP_MS) {
+    return res.status(401).json({ error: 'no autorizado' });
+  }
+
+  const skillId = process.env.ALEXA_SKILL_ID;
+  const skillIdEnRequest = req.body.context && req.body.context.System &&
+    req.body.context.System.application && req.body.context.System.application.applicationId;
+  if (!skillId || skillIdEnRequest !== skillId) {
+    return res.status(401).json({ error: 'no autorizado' });
+  }
+
+  alexaVerifier(certUrl, firma, req.rawBody, (err) => {
+    if (err) return res.status(401).json({ error: 'no autorizado' });
+    next();
+  });
+}
+
+async function manejarPreguntaAlexa(req, res) {
   // Shape real de un IntentRequest de Alexa (ver el modelo de interacción
   // del Custom Skill): la pregunta transcripta vive en
   // request.intent.slots.query.value — el nombre "query" viene del slot
@@ -499,8 +556,8 @@ async function manejarPreguntaAlexa(req, res) {
   }
 }
 
-app.post('/api/alexa', manejarPreguntaAlexa);
-app.post('/', manejarPreguntaAlexa);
+app.post('/api/alexa', requiereSecretoCompartido, manejarPreguntaAlexa);
+app.post('/', requiereFirmaAlexa, manejarPreguntaAlexa);
 
 // --- Sync manual (útil para probar sin esperar al cron) ---
 app.post('/api/sync', async (_req, res) => {
