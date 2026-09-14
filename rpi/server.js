@@ -454,7 +454,14 @@ app.post('/api/preguntar', async (req, res) => {
 // `false`, o sea que SIN secreto configurado, CUALQUIERA pasaría. Por eso
 // el chequeo exige explícitamente que `secreto` exista, no solo que
 // coincida.
-app.post('/api/alexa', async (req, res) => {
+//
+// Ojo con `tailscale funnel --set-path=/api/alexa`: pela el prefijo al
+// proxyear, la request le llega al backend como POST / (no POST
+// /api/alexa). Por eso el handler está montado en ambas rutas — '/' es la
+// que realmente usa Funnel, '/api/alexa' queda para pegarle directo desde
+// dentro del tailnet (curl de prueba, etc). POST a '/' no choca con nada:
+// no hay ningún otro handler POST en esa ruta, solo GET/estático.
+async function manejarPreguntaAlexa(req, res) {
   const secreto = process.env.ALEXA_SHARED_SECRET;
   if (!secreto || req.headers['x-alexa-secret'] !== secreto) {
     return res.status(401).json({ error: 'no autorizado' });
@@ -490,7 +497,10 @@ app.post('/api/alexa', async (req, res) => {
     // inesperados (red caída, etc.), ver chatbot.js.
     hablar('Hubo un error consultando tus datos: ' + err.message);
   }
-});
+}
+
+app.post('/api/alexa', manejarPreguntaAlexa);
+app.post('/', manejarPreguntaAlexa);
 
 // --- Sync manual (útil para probar sin esperar al cron) ---
 app.post('/api/sync', async (_req, res) => {
