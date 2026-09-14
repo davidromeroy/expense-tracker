@@ -32,6 +32,12 @@ app.use(express.json({
 }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// TEMPORAL: diagnosticando el flujo de Alexa — sacar una vez que ande.
+app.use((req, _res, next) => {
+  if (req.method === 'POST') console.log('[alexa-debug] llegó POST', req.path);
+  next();
+});
+
 // --- Filtros básicos (el camino principal y más confiable) ---
 app.get('/api/gastos', (req, res) => {
   const { desde, hasta, categoria, metodo_pago, tipo } = req.query;
@@ -503,10 +509,17 @@ function requiereFirmaAlexa(req, res, next) {
   const firma = req.headers.signature;
   const timestamp = req.body && req.body.request && req.body.request.timestamp;
 
+  // TEMPORAL: diagnosticando por qué el simulador de Alexa no llega a
+  // buen puerto — sacar estos logs una vez que ande.
+  console.log('[alexa-debug] POST / — certUrl:', !!certUrl, 'firma:', !!firma, 'rawBody:', !!req.rawBody, 'timestamp:', timestamp, '| reloj Pi ahora:', new Date().toISOString());
+
   if (!certUrl || !firma || !req.rawBody || !timestamp) {
+    console.log('[alexa-debug] rechazado: falta certUrl/firma/rawBody/timestamp');
     return res.status(401).json({ error: 'no autorizado' });
   }
-  if (Math.abs(Date.now() - new Date(timestamp).getTime()) > TOLERANCIA_TIMESTAMP_MS) {
+  const diffMs = Date.now() - new Date(timestamp).getTime();
+  if (Math.abs(diffMs) > TOLERANCIA_TIMESTAMP_MS) {
+    console.log('[alexa-debug] rechazado por timestamp, diffMs:', diffMs);
     return res.status(401).json({ error: 'no autorizado' });
   }
 
@@ -514,11 +527,16 @@ function requiereFirmaAlexa(req, res, next) {
   const skillIdEnRequest = req.body.context && req.body.context.System &&
     req.body.context.System.application && req.body.context.System.application.applicationId;
   if (!skillId || skillIdEnRequest !== skillId) {
+    console.log('[alexa-debug] rechazado por skillId. esperado:', skillId, 'recibido:', skillIdEnRequest);
     return res.status(401).json({ error: 'no autorizado' });
   }
 
   alexaVerifier(certUrl, firma, req.rawBody, (err) => {
-    if (err) return res.status(401).json({ error: 'no autorizado' });
+    if (err) {
+      console.log('[alexa-debug] rechazado por alexaVerifier:', err.message || err);
+      return res.status(401).json({ error: 'no autorizado' });
+    }
+    console.log('[alexa-debug] firma OK, pasando a manejarPreguntaAlexa');
     next();
   });
 }
