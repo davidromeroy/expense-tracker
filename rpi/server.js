@@ -39,7 +39,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // TEMPORAL: diagnosticando el flujo de Alexa — sacar una vez que ande.
 app.use((req, _res, next) => {
-  if (req.method === 'POST') console.log('[alexa-debug] llegó POST', req.path);
+  if (req.method === 'POST') {
+    req.t0 = Date.now();
+    console.log('[alexa-debug] llegó POST', req.path);
+  }
   next();
 });
 
@@ -571,6 +574,7 @@ async function manejarPreguntaAlexa(req, res) {
     if (reprompt) {
       respuesta.reprompt = { outputSpeech: { type: 'PlainText', text: reprompt } };
     }
+    console.log('[alexa-debug] respondiendo en', Date.now() - req.t0, 'ms | micrófono abierto:', !respuesta.shouldEndSession);
     res.json({ version: '1.0', response: respuesta });
   }
 
@@ -609,9 +613,14 @@ async function manejarPreguntaAlexa(req, res) {
     return hablar('No entendí. ' + COMO_PREGUNTAR, COMO_PREGUNTAR);
   }
 
+  // Después de responder se sigue escuchando, para poder encadenar preguntas
+  // sin tener que decir "abre finanzas" de nuevo. Si no se dice nada, Alexa
+  // lanza el reprompt y recién ahí cierra sola.
+  const SEGUIR = '¿Algo más? Empezá con "dime", o decí "para" para terminar.';
+
   try {
     const resultado = await askQuestion(pregunta);
-    hablar(resultado.respuesta);
+    hablar(resultado.respuesta + ' ' + SEGUIR, SEGUIR);
   } catch (err) {
     // askQuestion() ya atrapa el caso de cuota agotada de Gemini y devuelve
     // texto legible en vez de tirar — esto solo cubre errores realmente
