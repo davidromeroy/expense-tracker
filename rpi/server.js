@@ -511,12 +511,16 @@ const TOLERANCIA_TIMESTAMP_MS = 150 * 1000;
 
 function requiereFirmaAlexa(req, res, next) {
   const certUrl = req.headers.signaturecertchainurl;
-  const firma = req.headers.signature;
+  // Signature-256 (SHA-256), NO el header `Signature` a secas — ese es el
+  // esquema viejo con SHA-1 que Amazon dejó deprecado, y alexa-verifier v4
+  // verifica con RSA-SHA256. Mezclarlos da "invalid signature" con el
+  // certificado validando perfecto, que es justo lo que pasaba.
+  const firma = req.headers['signature-256'];
   const timestamp = req.body && req.body.request && req.body.request.timestamp;
 
   // TEMPORAL: diagnosticando por qué el simulador de Alexa no llega a
   // buen puerto — sacar estos logs una vez que ande.
-  console.log('[alexa-debug] POST / — certUrl:', !!certUrl, 'firma:', !!firma, 'rawBody:', !!req.rawBody, 'timestamp:', timestamp, '| reloj Pi ahora:', new Date().toISOString());
+  console.log('[alexa-debug] POST / — certUrl:', !!certUrl, 'signature-256:', !!req.headers['signature-256'], 'signature(sha1 viejo):', !!req.headers.signature, 'rawBody bytes:', req.rawBody && req.rawBody.length, 'tipo:', req.body && req.body.request && req.body.request.type);
 
   if (!certUrl || !firma || !req.rawBody || !timestamp) {
     console.log('[alexa-debug] rechazado: falta certUrl/firma/rawBody/timestamp');
@@ -551,21 +555,32 @@ async function manejarPreguntaAlexa(req, res) {
   // del Custom Skill): la pregunta transcripta vive en
   // request.intent.slots.query.value — el nombre "query" viene del slot
   // AMAZON.SearchQuery definido en el Skill.
+  const tipo = req.body && req.body.request && req.body.request.type;
   const slots = req.body && req.body.request && req.body.request.intent && req.body.request.intent.slots;
   const pregunta = slots && slots.query && slots.query.value;
 
-  function hablar(texto) {
+  // shouldEndSession corta el micrófono. Cerrar la sesión cuando todavía no
+  // hubo pregunta deja al usuario sin poder contestar: dice "abre finanzas",
+  // Alexa cierra, y la frase siguiente se va a un built-in de Amazon en vez
+  // de a esta skill. Por eso solo se cierra cuando ya se respondió algo.
+  function hablar(texto, seguirEscuchando = false) {
     res.json({
       version: '1.0',
       response: {
         outputSpeech: { type: 'PlainText', text: texto },
-        shouldEndSession: true,
+        shouldEndSession: !seguirEscuchando,
       },
     });
   }
 
+  // "Alexa, abre finanzas" manda un LaunchRequest: no trae intent ni slots,
+  // es solo la apertura. Se saluda y se deja el micrófono abierto.
+  if (tipo === 'LaunchRequest') {
+    return hablar('Hola. ¿Qué querés saber de tus finanzas?', true);
+  }
+
   if (!pregunta) {
-    return hablar('No entendí la pregunta, probá de nuevo.');
+    return hablar('No entendí la pregunta, probá de nuevo.', true);
   }
 
   try {
