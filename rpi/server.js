@@ -559,28 +559,54 @@ async function manejarPreguntaAlexa(req, res) {
   const slots = req.body && req.body.request && req.body.request.intent && req.body.request.intent.slots;
   const pregunta = slots && slots.query && slots.query.value;
 
-  // shouldEndSession corta el micrófono. Cerrar la sesión cuando todavía no
-  // hubo pregunta deja al usuario sin poder contestar: dice "abre finanzas",
-  // Alexa cierra, y la frase siguiente se va a un built-in de Amazon en vez
-  // de a esta skill. Por eso solo se cierra cuando ya se respondió algo.
-  function hablar(texto, seguirEscuchando = false) {
-    res.json({
-      version: '1.0',
-      response: {
-        outputSpeech: { type: 'PlainText', text: texto },
-        shouldEndSession: !seguirEscuchando,
-      },
-    });
+  // Alexa cierra la sesión sola si el usuario no contesta y no hay reprompt,
+  // así que cuando se deja el micrófono abierto siempre va uno. shouldEndSession
+  // corta el micrófono: cerrar antes de que haya habido pregunta deja al usuario
+  // sin poder contestar, y la frase siguiente se va a un built-in de Amazon.
+  function hablar(texto, reprompt = null) {
+    const respuesta = {
+      outputSpeech: { type: 'PlainText', text: texto },
+      shouldEndSession: !reprompt,
+    };
+    if (reprompt) {
+      respuesta.reprompt = { outputSpeech: { type: 'PlainText', text: reprompt } };
+    }
+    res.json({ version: '1.0', response: respuesta });
   }
 
-  // "Alexa, abre finanzas" manda un LaunchRequest: no trae intent ni slots,
-  // es solo la apertura. Se saluda y se deja el micrófono abierto.
+  // SessionEndedRequest avisa que la sesión ya terminó. La doc es explícita:
+  // "Your skill cannot return a response to SessionEndedRequest" — devolverle
+  // voz cuenta como respuesta inválida. Solo se acusa recibo con un 200 vacío.
+  if (tipo === 'SessionEndedRequest') {
+    const r = req.body.request;
+    console.log('[alexa-debug] SessionEnded — reason:', r.reason, 'error:', JSON.stringify(r.error || null));
+    return res.status(200).end();
+  }
+
+  // Todos los samples del modelo exigen una palabra de arranque ("dime X",
+  // "pregunta X") porque Alexa rechaza un sample que sea solo el slot
+  // AMAZON.SearchQuery. Con la sesión abierta, una pregunta pelada no matchea
+  // ningún intent y Alexa cierra con EXCEEDED_MAX_REPROMPTS. Por eso el saludo
+  // dicta la fórmula en vez de preguntar abierto.
+  const COMO_PREGUNTAR = 'Empezá con "dime" y tu pregunta. Por ejemplo: dime cuánto gasté en total.';
+
   if (tipo === 'LaunchRequest') {
-    return hablar('Hola. ¿Qué querés saber de tus finanzas?', true);
+    return hablar('Hola. ' + COMO_PREGUNTAR, COMO_PREGUNTAR);
+  }
+
+  // Los intents obligatorios de Alexa (Stop/Cancel/Help) llegan como
+  // IntentRequest sin slot `query`, así que sin esto caerían en el "no entendí"
+  // de abajo y "Alexa, para" dejaría el micrófono abierto en vez de cortar.
+  const nombreIntent = req.body.request.intent && req.body.request.intent.name;
+  if (nombreIntent === 'AMAZON.StopIntent' || nombreIntent === 'AMAZON.CancelIntent') {
+    return hablar('Listo.');
+  }
+  if (nombreIntent === 'AMAZON.HelpIntent') {
+    return hablar(COMO_PREGUNTAR, COMO_PREGUNTAR);
   }
 
   if (!pregunta) {
-    return hablar('No entendí la pregunta, probá de nuevo.', true);
+    return hablar('No entendí. ' + COMO_PREGUNTAR, COMO_PREGUNTAR);
   }
 
   try {
