@@ -241,7 +241,7 @@ tocar el router ni exponer la Pi a internet público.
 ## Fase 4 — Preguntas en lenguaje natural
 
 Ya viene integrado en `server.js` vía `/api/preguntar`, usando la API de
-Claude con function calling: el modelo traduce tu pregunta a un `SELECT`,
+Gemini con function calling: el modelo traduce tu pregunta a un `SELECT`,
 el servidor valida que sea de solo lectura antes de correrlo contra SQLite,
 y el modelo redacta la respuesta a partir del resultado.
 
@@ -250,6 +250,21 @@ y categoría del dashboard siguen siendo el camino rápido y 100% predecible
 para el día a día. La pregunta libre es para lo que no cabe en un dropdown
 ("¿en qué mes gasté más el año pasado?", "¿cuánto llevo en total este mes
 comparado con el anterior?").
+
+---
+
+## Fase 5 — Las mismas preguntas, por voz
+
+Un Custom Skill de Alexa ("finanzas") que le habla al mismo chatbot: decís
+*"Alexa, abre finanzas"* y después *"dime cuánto gasté en alimentos"*.
+
+Tailscale Funnel publica **una sola ruta** a internet para que Alexa pueda
+llegar; todo el resto de la Pi sigue accesible solo desde tu red Tailscale.
+Esa ruta verifica la firma criptográfica que Alexa incluye en cada request,
+así que no alcanza con adivinar la URL.
+
+Documentación completa —arquitectura, configuración, y los gotchas que costó
+descubrir— en [`docs/alexa.md`](docs/alexa.md).
 
 ---
 
