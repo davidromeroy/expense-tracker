@@ -89,6 +89,18 @@ function runQueryFunction() {
   };
 }
 
+// `categoria` es texto libre a propósito (se agrega una nueva desde el Atajo,
+// sin tocar código), así que la lista real vive en los datos y no en ninguna
+// constante. Sin esto el modelo inventa nombres: preguntar "cuánto gasté en
+// comida" le hacía generar categoria = 'Comida' cuando la categoría real es
+// 'Alimentos', y devolvía un total equivocado sin ningún error visible.
+function categoriasReales() {
+  return db
+    .prepare("SELECT DISTINCT categoria FROM movimientos WHERE categoria IS NOT NULL AND categoria != '' ORDER BY categoria")
+    .all()
+    .map((r) => r.categoria);
+}
+
 function isSafeSelect(sql) {
   const trimmed = sql.trim().replace(/;+\s*$/, '');
   if (!/^select\s/i.test(trimmed)) return null;
@@ -129,7 +141,13 @@ async function askQuestionInner(pregunta) {
     model: MODEL,
     contents: pregunta,
     config: {
-      systemInstruction: `Hoy es ${today}. Traduce preguntas sobre finanzas personales (gastos, ingresos, inversiones, ahorro) a SQL contra este esquema:\n${SCHEMA_DESC}\nUsa siempre la función run_query. Si la pregunta es ambigua, elige la interpretación más razonable y dilo en tu respuesta final.`,
+      systemInstruction: `Hoy es ${today}. Traduce preguntas sobre finanzas personales (gastos, ingresos, inversiones, ahorro) a SQL contra este esquema:\n${SCHEMA_DESC}\n` +
+        `Las ÚNICAS categorías que existen en los datos son: ${categoriasReales().join(', ')}.\n` +
+        `Usá exactamente esos nombres. Si el usuario usa un sinónimo, traducilo a la categoría real ` +
+        `(por ejemplo "comida" o "supermercado" se refieren a la categoría de alimentación de la lista). ` +
+        `Si ninguna categoría de la lista corresponde a lo que preguntan, no inventes una: hacé la consulta ` +
+        `sin filtrar por categoría y aclaralo en la respuesta final.\n` +
+        `Usa siempre la función run_query. Si la pregunta es ambigua, elige la interpretación más razonable y dilo en tu respuesta final.`,
       tools: [{ functionDeclarations: [runQueryFunction()] }],
     },
   });
