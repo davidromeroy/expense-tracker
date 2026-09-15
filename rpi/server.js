@@ -27,7 +27,12 @@ const SYNC_INTERVAL_MIN = Number(process.env.SYNC_INTERVAL_MIN || 15);
 // propio no es necesariamente igual al original).
 app.use(express.json({
   verify: (req, _res, buf) => {
-    req.rawBody = buf.toString('utf8');
+    // Buffer crudo, no string: alexaVerifier hashea esto para comparar
+    // contra la firma. Pasar un string forzaría un decode+encode UTF-8 de
+    // ida y vuelta antes del hash — en teoría sin pérdida para UTF-8
+    // válido, pero el Buffer tal cual es la opción que no depende de esa
+    // garantía.
+    req.rawBody = buf;
   },
 }));
 app.use(express.static(path.join(__dirname, 'public')));
