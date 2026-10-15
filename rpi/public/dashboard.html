@@ -196,6 +196,13 @@ th.ord:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
 .catlist .amt{font-family:var(--dsp);font-weight:700;font-size:13.5px;color:var(--ink);font-variant-numeric:tabular-nums}
 .catlist .pct{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
 .catlist .row.sub{opacity:.72;font-size:12px}
+/* Filas y porciones que abren el detalle de gastos de esa categoría */
+.catlist .row[data-seg],.catlist .row[data-cat]{cursor:pointer;border-radius:6px;transition:background .15s}
+.catlist .row[data-seg]:hover,.catlist .row[data-cat]:hover{background:var(--card-2)}
+.catlist .row[data-seg]:focus-visible,.catlist .row[data-cat]:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+.split circle[data-seg]{cursor:pointer;transition:opacity .15s}
+.split circle[data-seg]:hover{opacity:.8}
+.split circle[data-seg]:focus-visible{outline:none;opacity:.8}
 .catlist .row.sub .nm::before{content:"└ ";color:var(--ink-3)}
 
 .specs{display:grid;grid-template-columns:repeat(auto-fit,minmax(228px,1fr));gap:0 26px;padding:16px 20px 0}
@@ -238,6 +245,32 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
 .zero{stroke:var(--ink-3);stroke-width:1}
 .ring{stroke:var(--card);stroke-width:2}
 [hidden]{display:none!important}
+/* ---- modal: gastos de una categoría ---- */
+.modal{padding:0;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--ink);
+  width:min(560px,calc(100vw - 24px));max-height:min(80vh,680px);box-shadow:0 24px 60px rgba(0,0,0,.45)}
+.modal[open]{display:flex;flex-direction:column}
+.modal::backdrop{background:rgba(0,0,0,.58)}
+html.modal-abierto{overflow:hidden}
+.mhead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 20px 14px;border-bottom:1px solid var(--line)}
+.mhead h2{margin:0;font-family:var(--dsp);font-weight:700;font-size:19px;letter-spacing:-.015em}
+.mhead .msub{margin:4px 0 0;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.mclose{flex:0 0 auto;width:36px;height:36px;border-radius:9px;border:1px solid var(--line);background:var(--card-2);color:var(--ink-2);
+  font-size:20px;line-height:1;cursor:pointer}
+.mclose:hover{color:var(--ink);border-color:var(--ink-3)}
+.mclose:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.mbody{overflow-y:auto;padding:2px 20px}
+.mrow{display:grid;grid-template-columns:76px 1fr auto;gap:12px;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--line-2);font-size:13px}
+.mrow:last-child{border-bottom:0}
+.mrow .mf{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.mrow .md{color:var(--ink-2);min-width:0;overflow-wrap:anywhere}
+.mrow .md small{display:block;margin-top:2px;font-size:11.5px;color:var(--ink-3)}
+.mrow .mm{font-family:var(--dsp);font-weight:700;font-size:13.5px;color:var(--ink);font-variant-numeric:tabular-nums;text-align:right}
+.mrow .unica{display:inline-block;margin-left:6px;font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;
+  padding:2px 6px;border-radius:5px;color:var(--s4);border:1px solid var(--s4);vertical-align:1px}
+.mfoot{display:flex;justify-content:space-between;gap:12px;padding:13px 20px 16px;border-top:1px solid var(--line);font-size:13px;color:var(--ink-2)}
+.mfoot b{font-family:var(--dsp);color:var(--ink);font-variant-numeric:tabular-nums}
+.mmsg{margin:0;padding:26px 0;text-align:center;color:var(--ink-3);font-size:13px}
+.mrow .sn{font-style:normal;color:var(--ink-3)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 @media (max-width:520px){
   .app{padding:20px 12px 40px}
@@ -263,6 +296,9 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     <div class="panel"><div class="state"><div class="spin"></div><h2>Cargando</h2><p>Leyendo los datos de la Pi…</p></div></div>
   </div>
 </div>
+
+<!-- Fuera de #paneles a propósito: pintarPanel() reescribe ese contenedor entero y se llevaría el diálogo puesto. -->
+<dialog id="catModal" class="modal" aria-labelledby="catModalTitulo"></dialog>
 
 <script>
 (function () {
@@ -324,6 +360,7 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
   var mesSel = -1;   // -1 = general
   var catMes = -1;   // -1 = todo; mes elegido en Categorías (independiente de mesSel y detFiltro.mes)
   var catBase = 'gasto'; // Categorías: el % se calcula sobre 'gasto' (suma 100%) o sobre 'ingreso' (no suma 100%)
+  var catSegs = [];      // porciones del anillo de Categorías tal como se pintaron; el clic las resuelve por índice
   var modoEvo = 'mov';
   var verFondo = false;     // tarjeta Invertido <-> Fondo de emergencia
   var verLiquidez = false;  // tarjeta Neto <-> Liquidez
@@ -499,6 +536,7 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
 
     // Un mes puede traer ingresos pero ningún gasto: sin esto el anillo divide por cero.
     if (!total) {
+      catSegs = [];
       return '<section class="panel">' +
         '<div class="phead"><h2>En qué se va el gasto</h2><span class="tag">' + esc(ambito) + '</span></div>' +
         barra +
@@ -527,8 +565,13 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     var visibles = cats.slice(0, VIS);
     var cola = cats.slice(VIS);
     var colaTotal = cola.reduce(function (a, c) { return a + c.total; }, 0);
-    var segs = visibles.map(function (c, i) { return { nom: c.categoria, v: c.total, color: SERIE[i] }; });
-    if (cola.length) segs.push({ nom: 'Otras ' + cola.length, v: colaTotal, color: '--mute' });
+    // `cats` son las categorías reales que agrupa cada porción: las que abre el modal.
+    var segs = visibles.map(function (c, i) { return { nom: c.categoria, v: c.total, color: SERIE[i], cats: [c.categoria] }; });
+    if (cola.length) {
+      segs.push({ nom: 'Otras ' + cola.length, v: colaTotal, color: '--mute',
+        cats: cola.map(function (c) { return c.categoria; }) });
+    }
+    catSegs = segs;
 
     // Sobre ingresos el anillo representa el ingreso entero: lo no gastado se dibuja
     // como "Restante". Si gastaste de más no hay restante y el anillo se llena con
@@ -538,20 +581,26 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     var baseAnillo = sobreIngreso ? Math.max(ing, total) : total;
 
     var C = 2 * Math.PI * 70, off = 0;
-    var anillo = arcos.map(function (s) {
+    // Las porciones de categoría (no el "Restante") abren el modal con sus gastos.
+    var anillo = arcos.map(function (s, i) {
       var largo = s.v / baseAnillo * C;
+      var abre = i < segs.length
+        ? ' data-seg="' + i + '" role="button" tabindex="0" aria-label="Ver los gastos de ' + esc(s.nom) + ': ' + money(s.v) + '"'
+        : '';
       var d = '<circle cx="110" cy="110" r="70" stroke="var(' + s.color + ')" stroke-dasharray="' +
-        Math.max(0, largo - 2.5).toFixed(1) + ' ' + C.toFixed(1) + '" stroke-dashoffset="' + (-off).toFixed(1) + '"/>';
+        Math.max(0, largo - 2.5).toFixed(1) + ' ' + C.toFixed(1) + '" stroke-dashoffset="' + (-off).toFixed(1) + '"' + abre + '/>';
       off += largo;
       return d;
     }).join('');
 
-    var lista = segs.map(function (s) {
-      return '<div class="row"><span class="sw" style="background:var(' + s.color + ')"></span>' +
+    var lista = segs.map(function (s, i) {
+      return '<div class="row" data-seg="' + i + '" role="button" tabindex="0">' +
+        '<span class="sw" style="background:var(' + s.color + ')"></span>' +
         '<span class="nm">' + esc(s.nom) + '</span><span class="amt">' + money(s.v) + '</span>' +
         '<span class="pct">' + pct(s.v / base * 100) + '</span></div>';
     }).join('') + cola.map(function (c) {
-      return '<div class="row sub"><span></span><span class="nm">' + esc(c.categoria) + '</span>' +
+      return '<div class="row sub" data-cat="' + esc(c.categoria) + '" role="button" tabindex="0"><span></span>' +
+        '<span class="nm">' + esc(c.categoria) + '</span>' +
         '<span class="amt">' + money(c.total) + '</span><span class="pct">' + pct(c.total / base * 100) + '</span></div>';
     }).join('') + (sobreIngreso && restante > 0
       ? '<div class="row"><span class="sw" style="background:var(--pos)"></span><span class="nm">Restante</span>' +
@@ -602,6 +651,65 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
       '<div class="catlist">' + lista + '</div></div>' +
       '<div class="read">' + nota + '</div></section>';
   }
+
+  // ---------- modal: gastos de una categoría ----------
+  var modalSeq = 0; // si llega otro clic antes de que responda el server, gana el último
+
+  // `nombres` son las categorías reales a listar: una sola, o varias si es la porción "Otras".
+  function abrirModalCategoria(nombres, titulo) {
+    var dlg = document.getElementById('catModal');
+    var mes = catMes < 0 ? null : D.porMes[catMes];
+    var ambito = mes ? cap(nombreMes(mes.mes)) : 'Todo el período';
+    var multiples = nombres.length > 1;
+    var seq = ++modalSeq;
+
+    function cabecera(sub) {
+      return '<div class="mhead"><div><h2 id="catModalTitulo">' + esc(titulo) + '</h2>' +
+        '<p class="msub">' + esc(sub) + '</p></div>' +
+        '<button type="button" class="mclose" data-cerrar aria-label="Cerrar">×</button></div>';
+    }
+
+    dlg.innerHTML = cabecera(ambito) + '<div class="mbody"><p class="mmsg">Cargando…</p></div>';
+    if (!dlg.open) {
+      dlg.showModal();
+      document.documentElement.classList.add('modal-abierto');
+    }
+
+    var q = Object.assign(rangoDeMes(catMes), { tipo: 'Gasto' });
+    if (!multiples) q.categoria = nombres[0];
+    fetch('api/gastos?' + new URLSearchParams(q).toString())
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (rows) {
+        if (seq !== modalSeq) return;
+        var filas = multiples ? rows.filter(function (r) { return nombres.indexOf(r.categoria) >= 0; }) : rows;
+        var total = filas.reduce(function (a, r) { return a + r.monto; }, 0);
+        var cuerpo = filas.length ? filas.map(function (r) {
+          var principal = r.nota ? esc(r.nota) : (multiples ? esc(r.categoria) : '<em class="sn">Sin nota</em>');
+          var sec = [multiples && r.nota ? esc(r.categoria) : '', esc(r.metodo_pago || '—')].filter(Boolean).join(' · ');
+          // Misma regla que la nota "Ojo con leer…" del panel: compra grande, no gasto corriente.
+          var unica = r.monto >= D.corteCompraGrande ? '<span class="unica">única</span>' : '';
+          return '<div class="mrow"><span class="mf">' + esc(r.fecha) + '</span>' +
+            '<span class="md">' + principal + unica + '<small>' + sec + '</small></span>' +
+            '<span class="mm">' + money(r.monto) + '</span></div>';
+        }).join('') : '<p class="mmsg">No hay gastos en este período.</p>';
+        dlg.innerHTML = cabecera(ambito + ' · ' + filas.length + (filas.length === 1 ? ' gasto' : ' gastos')) +
+          '<div class="mbody">' + cuerpo + '</div>' +
+          '<div class="mfoot"><span>Total</span><b>' + money(total) + '</b></div>';
+      })
+      .catch(function (err) {
+        if (seq !== modalSeq) return;
+        dlg.innerHTML = cabecera(ambito) + '<div class="mbody"><p class="mmsg">No se pudo cargar: ' + esc(err.message) + '</p></div>';
+      });
+  }
+
+  (function () {
+    var dlg = document.getElementById('catModal');
+    // Clic en el fondo (el <dialog> mismo, no su contenido) o en la ×. Escape ya lo cierra el navegador.
+    dlg.addEventListener('click', function (e) {
+      if (e.target === dlg || e.target.closest('[data-cerrar]')) dlg.close();
+    });
+    dlg.addEventListener('close', function () { document.documentElement.classList.remove('modal-abierto'); });
+  })();
 
   // ---------- panel: métodos ----------
   function panelMetodos() {
@@ -991,14 +1099,17 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
         'método se cruzan entre sí — todo lo de Alimentos en julio, por ejemplo.</div></section>';
   }
 
-  function detRango() {
-    if (detFiltro.mes < 0) return {};
-    var mes = D.porMes[detFiltro.mes].mes; // 'YYYY-MM'
+  // Rango de fechas para api/gastos del mes en la posición `i` de D.porMes
+  // (-1 = todo el período, sin límites). Lo comparten Detalle y el modal de Categorías.
+  function rangoDeMes(i) {
+    if (i < 0) return {};
+    var mes = D.porMes[i].mes; // 'YYYY-MM'
     // '-31' como límite superior funciona aunque el mes tenga menos días: la
     // comparación es de texto 'YYYY-MM-DD', y cualquier fecha real de ese
     // mes ordena antes que '...-31' igual.
     return { desde: mes + '-01', hasta: mes + '-31' };
   }
+  function detRango() { return rangoDeMes(detFiltro.mes); }
 
   function cargarDetalle() {
     var body = document.getElementById('detBody');
@@ -1270,6 +1381,21 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     });
     [].forEach.call(document.querySelectorAll('.mchip[data-cm]'), function (c) {
       c.addEventListener('click', function () { catMes = Number(c.dataset.cm); pintarPanel(); });
+    });
+    // Porciones del anillo y filas del listado de Categorías: abren el modal de gastos.
+    [].forEach.call(document.querySelectorAll('.split [data-seg], .split [data-cat]'), function (el) {
+      function abrir() {
+        if (el.dataset.seg !== undefined) {
+          var s = catSegs[Number(el.dataset.seg)];
+          if (s) abrirModalCategoria(s.cats, s.cats.length > 1 ? s.nom + ' categorías' : s.nom);
+        } else {
+          abrirModalCategoria([el.dataset.cat], el.dataset.cat);
+        }
+      }
+      el.addEventListener('click', abrir);
+      el.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(); }
+      });
     });
     [].forEach.call(document.querySelectorAll('.seg button[data-cbase]'), function (b) {
       b.addEventListener('click', function () { catBase = b.dataset.cbase; pintarPanel(); });
