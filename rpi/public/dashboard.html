@@ -1235,6 +1235,18 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     pintarChips(); pintarPanel();
   }
 
+  // En el celular las barras de meses scrollean, y elegir un mes repinta el panel
+  // entero, que deja la barra otra vez en la posición cero: el mes elegido (justo
+  // los recientes, que quedan al final) se perdería fuera de pantalla. Se centra a
+  // mano con scrollLeft, no con scrollIntoView, que además movería la página en
+  // vertical.
+  function centrarChipElegido(selector) {
+    var sel = document.querySelector(selector + '[aria-selected="true"]');
+    if (!sel) return;
+    var barra = sel.parentNode, b = barra.getBoundingClientRect(), r = sel.getBoundingClientRect();
+    barra.scrollLeft += (r.left - b.left) - (b.width - r.width) / 2;
+  }
+
   function conectar() {
     var chips = [].slice.call(document.querySelectorAll('.chip'));
     chips.forEach(function (c, i) {
@@ -1262,15 +1274,11 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     [].forEach.call(document.querySelectorAll('.seg button[data-cbase]'), function (b) {
       b.addEventListener('click', function () { catBase = b.dataset.cbase; pintarPanel(); });
     });
-    // En el celular la barra de meses scrollea, y al repintar el panel vuelve a
-    // la posición cero: el mes elegido (justo los recientes, que quedan al final)
-    // se perdería fuera de pantalla. Se centra a mano con scrollLeft, no con
-    // scrollIntoView, que además movería la página en vertical.
-    var cmSel = document.querySelector('.mchip[data-cm][aria-selected="true"]');
-    if (cmSel) {
-      var cmBar = cmSel.parentNode, br = cmBar.getBoundingClientRect(), cr = cmSel.getBoundingClientRect();
-      cmBar.scrollLeft += (cr.left - br.left) - (br.width - cr.width) / 2;
-    }
+    // Cada selector de mes usa su propio atributo (ver arriba), así que se centra
+    // cada uno por separado.
+    centrarChipElegido('.mchip[data-m]');   // Resumen
+    centrarChipElegido('.mchip[data-cm]');  // Categorías
+    centrarChipElegido('.mchip[data-dm]');  // Detalle
     [].forEach.call(document.querySelectorAll('.sparkbar'), function (r) {
       r.addEventListener('click', function () { mesSel = Number(r.dataset.i); pintarPanel(); });
     });
