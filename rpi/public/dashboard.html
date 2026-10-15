@@ -321,6 +321,7 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
 
   var D = null;      // payload del API
   var mesSel = -1;   // -1 = general
+  var catMes = -1;   // -1 = todo; mes elegido en Categorías (independiente de mesSel y detFiltro.mes)
   var modoEvo = 'mov';
   var verFondo = false;     // tarjeta Invertido <-> Fondo de emergencia
   var verLiquidez = false;  // tarjeta Neto <-> Liquidez
@@ -478,7 +479,30 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
 
   // ---------- panel: categorías ----------
   function panelCategorias() {
-    var cats = D.porCategoria, total = cats.reduce(function (a, c) { return a + c.total; }, 0);
+    var meses = D.porMes;
+    // Si el sync cambia la cantidad de meses, el índice guardado puede quedar fuera de rango.
+    if (catMes >= meses.length) catMes = -1;
+    var mes = catMes < 0 ? null : meses[catMes];
+    var cats = mes ? mes.porCategoria : D.porCategoria;
+    var total = cats.reduce(function (a, c) { return a + c.total; }, 0);
+    var nMov = cats.reduce(function (a, c) { return a + c.n; }, 0);
+    var ambito = mes ? cap(nombreMes(mes.mes)) : 'todo el período';
+
+    var chips = '<button class="mchip" data-cm="-1" role="tab" aria-selected="' + (catMes < 0) + '">Todo</button>' +
+      meses.map(function (m, i) {
+        return '<button class="mchip" data-cm="' + i + '" role="tab" aria-selected="' + (catMes === i) + '">' +
+          cap(nombreMes(m.mes, true)) + '</button>';
+      }).join('');
+    var barra = '<div class="mesbar" role="tablist" aria-label="Período">' + chips + '</div>';
+
+    // Un mes puede traer ingresos pero ningún gasto: sin esto el anillo divide por cero.
+    if (!total) {
+      return '<section class="panel">' +
+        '<div class="phead"><h2>En qué se va el gasto</h2><span class="tag">' + esc(ambito) + '</span></div>' +
+        barra +
+        '<div class="read"><b>Sin gastos en ' + esc(ambito) + '.</b> Elegí otro período para ver el desglose.</div></section>';
+    }
+
     // Más de 6 porciones y los ángulos chicos dejan de distinguirse: la cola
     // se agrupa en "Otras" y se desglosa en la lista de al lado.
     var VIS = 5;
@@ -511,15 +535,17 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
       ? '<b>Ojo con leer «' + esc(top.categoria) + ' ' + pct(top.total / total * 100) + '» como gasto corriente:</b> ' +
         money(top.unico) + ' de esos ' + money(top.total) + ' son compras únicas de más de ' + money0(D.corteCompraGrande) +
         ' que no se repiten todos los meses.'
-      : '<b>Tus ' + cats.length + ' categorías, ordenadas por peso.</b> El anillo dibuja las ' + segs.length +
+      : '<b>' + (mes ? 'En ' + esc(ambito) + ' hubo ' : 'Tus ') + cats.length + ' categorías, ordenadas por peso.</b> El anillo dibuja las ' + segs.length +
         ' principales; el resto se agrupa para que los ángulos chicos sigan siendo legibles.';
 
     return '<section class="panel">' +
-      '<div class="phead"><h2>En qué se va el gasto</h2><span class="tag">' + cats.length + ' categorías</span></div>' +
+      '<div class="phead"><h2>En qué se va el gasto</h2><span class="tag">' +
+        (mes ? esc(ambito) + (mes.enCurso ? ' · en curso' : '') + ' · ' : '') + cats.length + ' categorías</span></div>' +
+      barra +
       '<div class="split">' + svg('0 0 220 220',
         '<g transform="rotate(-90 110 110)" fill="none" stroke-width="26">' + anillo + '</g>' +
         '<text class="dcv" x="110" y="110" text-anchor="middle">' + money0(total) + '</text>' +
-        '<text class="dcl" x="110" y="128" text-anchor="middle">' + D.general.n + ' MOV</text>',
+        '<text class="dcl" x="110" y="128" text-anchor="middle">' + nMov + ' MOV</text>',
         'Gasto por categoría') +
       '<div class="catlist">' + lista + '</div></div>' +
       '<div class="read">' + nota + '</div></section>';
@@ -1178,6 +1204,18 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     [].forEach.call(document.querySelectorAll('.mchip[data-m]'), function (c) {
       c.addEventListener('click', function () { mesSel = Number(c.dataset.m); pintarPanel(); });
     });
+    [].forEach.call(document.querySelectorAll('.mchip[data-cm]'), function (c) {
+      c.addEventListener('click', function () { catMes = Number(c.dataset.cm); pintarPanel(); });
+    });
+    // En el celular la barra de meses scrollea, y al repintar el panel vuelve a
+    // la posición cero: el mes elegido (justo los recientes, que quedan al final)
+    // se perdería fuera de pantalla. Se centra a mano con scrollLeft, no con
+    // scrollIntoView, que además movería la página en vertical.
+    var cmSel = document.querySelector('.mchip[data-cm][aria-selected="true"]');
+    if (cmSel) {
+      var cmBar = cmSel.parentNode, br = cmBar.getBoundingClientRect(), cr = cmSel.getBoundingClientRect();
+      cmBar.scrollLeft += (cr.left - br.left) - (br.width - cr.width) / 2;
+    }
     [].forEach.call(document.querySelectorAll('.sparkbar'), function (r) {
       r.addEventListener('click', function () { mesSel = Number(r.dataset.i); pintarPanel(); });
     });
