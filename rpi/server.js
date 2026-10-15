@@ -222,6 +222,22 @@ function resumenDe(movs) {
   };
 }
 
+// Desglose de gasto por categoría, ordenado por peso. Lo usan el total general
+// y cada mes por igual — una sola cuenta, así la regla de "compras únicas"
+// (`unico`) no puede divergir entre la vista de "Todo" y la de un mes.
+function categoriasDe(gastos) {
+  return [...gastos.reduce((map, r) => {
+    const c = map.get(r.categoria) || { categoria: r.categoria, total: 0, n: 0, unico: 0 };
+    c.total += r.monto;
+    c.n += 1;
+    if (r.monto >= CORTE_COMPRA_GRANDE) c.unico += r.monto;
+    map.set(r.categoria, c);
+    return map;
+  }, new Map()).values()]
+    .map((c) => ({ ...c, total: round2(c.total), unico: round2(c.unico) }))
+    .sort((a, b) => b.total - a.total);
+}
+
 app.get('/api/dashboard', (_req, res) => {
   const todos = db.prepare('SELECT * FROM movimientos ORDER BY fecha ASC').all();
   const saldos = db.prepare('SELECT * FROM saldos ORDER BY fecha ASC, cuenta ASC').all();
@@ -274,11 +290,16 @@ app.get('/api/dashboard', (_req, res) => {
   const hoy = new Date().toISOString().slice(0, 10);
   const mesEnCurso = hoy.slice(0, 7);
 
-  const porMes = meses.map((mes) => ({
-    mes,
-    enCurso: mes === mesEnCurso,
-    ...resumenDe(flujos.filter((r) => r.fecha.slice(0, 7) === mes)),
-  }));
+  const porMes = meses.map((mes) => {
+    const movs = flujos.filter((r) => r.fecha.slice(0, 7) === mes);
+    return {
+      mes,
+      enCurso: mes === mesEnCurso,
+      ...resumenDe(movs),
+      // Un mes puede tener ingresos y cero gastos: acá queda un array vacío.
+      porCategoria: categoriasDe(movs.filter((r) => r.tipo === 'Gasto')),
+    };
+  });
 
   // Los meses cerrados son los únicos que se pueden comparar entre sí: el mes
   // en curso siempre parece un desplome porque todavía no terminó.
@@ -324,16 +345,7 @@ app.get('/api/dashboard', (_req, res) => {
   const patrimonioTotalMov = round2(patrimonioInicialMov + generalBase.ing - generalBase.gas);
   const liquidez = round2(patrimonioTotalMov - generalBase.inv - fondoEmergenciaTotal);
 
-  const porCategoria = [...gastos.reduce((map, r) => {
-    const c = map.get(r.categoria) || { categoria: r.categoria, total: 0, n: 0, unico: 0 };
-    c.total += r.monto;
-    c.n += 1;
-    if (r.monto >= CORTE_COMPRA_GRANDE) c.unico += r.monto;
-    map.set(r.categoria, c);
-    return map;
-  }, new Map()).values()]
-    .map((c) => ({ ...c, total: round2(c.total), unico: round2(c.unico) }))
-    .sort((a, b) => b.total - a.total);
+  const porCategoria = categoriasDe(gastos);
 
   const porMetodo = [...gastos.reduce((map, r) => {
     const k = r.metodo_pago || 'Sin método';
