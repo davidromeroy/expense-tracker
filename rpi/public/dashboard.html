@@ -125,7 +125,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);font-s
 .tools .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
 .seg{display:inline-flex;background:var(--card-2);border:1px solid var(--line);border-radius:9px;padding:3px}
 .seg button{font-family:var(--ui);font-weight:600;font-size:12.5px;padding:6px 13px;min-height:32px;border:0;background:transparent;color:var(--ink-3);cursor:pointer;border-radius:6px;transition:background .16s,color .16s}
-.seg button[aria-pressed="true"]{background:var(--brand);color:#fff}
+.seg button[aria-pressed="true"],.seg button[aria-checked="true"]{background:var(--brand);color:#fff}
+.seg button:disabled{opacity:.4;cursor:not-allowed}
 .seg button:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
 
 .tools.det select,.tools.det input[type="search"]{font-family:var(--ui);font-size:12.5px;font-weight:500;
@@ -322,6 +323,7 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
   var D = null;      // payload del API
   var mesSel = -1;   // -1 = general
   var catMes = -1;   // -1 = todo; mes elegido en Categorías (independiente de mesSel y detFiltro.mes)
+  var catBase = 'gasto'; // Categorías: el % se calcula sobre 'gasto' (suma 100%) o sobre 'ingreso' (no suma 100%)
   var modoEvo = 'mov';
   var verFondo = false;     // tarjeta Invertido <-> Fondo de emergencia
   var verLiquidez = false;  // tarjeta Neto <-> Liquidez
@@ -503,6 +505,22 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
         '<div class="read"><b>Sin gastos en ' + esc(ambito) + '.</b> Elegí otro período para ver el desglose.</div></section>';
     }
 
+    // Base del porcentaje. Sobre los gastos suma 100%. Sobre los ingresos responde
+    // "de lo que entró, ¿cuánto se fue en cada categoría?" y NO suma 100%: lo que
+    // falta es lo que sobró (y si gastaste más de lo que entró, se pasa de 100%).
+    var ing = mes ? mes.ing : D.general.ing;
+    var hayIngreso = ing > 0;
+    var sobreIngreso = catBase === 'ingreso' && hayIngreso;
+    var base = sobreIngreso ? ing : total;
+    var restante = ing - total;
+
+    var selBase = '<div class="tools"><span class="lbl">Porcentaje sobre</span>' +
+      '<div class="seg" role="radiogroup" aria-label="Base del porcentaje">' +
+      '<button type="button" role="radio" data-cbase="gasto" aria-checked="' + !sobreIngreso + '">Mis gastos</button>' +
+      '<button type="button" role="radio" data-cbase="ingreso" aria-checked="' + sobreIngreso + '"' +
+        (hayIngreso ? '' : ' disabled title="Sin ingresos registrados en este período"') + '>Mis ingresos</button>' +
+      '</div></div>';
+
     // Más de 6 porciones y los ángulos chicos dejan de distinguirse: la cola
     // se agrupa en "Otras" y se desglosa en la lista de al lado.
     var VIS = 5;
@@ -512,9 +530,16 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     var segs = visibles.map(function (c, i) { return { nom: c.categoria, v: c.total, color: SERIE[i] }; });
     if (cola.length) segs.push({ nom: 'Otras ' + cola.length, v: colaTotal, color: '--mute' });
 
+    // Sobre ingresos el anillo representa el ingreso entero: lo no gastado se dibuja
+    // como "Restante". Si gastaste de más no hay restante y el anillo se llena con
+    // el gasto (los porcentajes de la lista pasan de 100%).
+    var arcos = segs.slice();
+    if (sobreIngreso && restante > 0) arcos.push({ nom: 'Restante', v: restante, color: '--pos' });
+    var baseAnillo = sobreIngreso ? Math.max(ing, total) : total;
+
     var C = 2 * Math.PI * 70, off = 0;
-    var anillo = segs.map(function (s) {
-      var largo = s.v / total * C;
+    var anillo = arcos.map(function (s) {
+      var largo = s.v / baseAnillo * C;
       var d = '<circle cx="110" cy="110" r="70" stroke="var(' + s.color + ')" stroke-dasharray="' +
         Math.max(0, largo - 2.5).toFixed(1) + ' ' + C.toFixed(1) + '" stroke-dashoffset="' + (-off).toFixed(1) + '"/>';
       off += largo;
@@ -524,29 +549,56 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     var lista = segs.map(function (s) {
       return '<div class="row"><span class="sw" style="background:var(' + s.color + ')"></span>' +
         '<span class="nm">' + esc(s.nom) + '</span><span class="amt">' + money(s.v) + '</span>' +
-        '<span class="pct">' + pct(s.v / total * 100) + '</span></div>';
+        '<span class="pct">' + pct(s.v / base * 100) + '</span></div>';
     }).join('') + cola.map(function (c) {
       return '<div class="row sub"><span></span><span class="nm">' + esc(c.categoria) + '</span>' +
-        '<span class="amt">' + money(c.total) + '</span><span class="pct">' + pct(c.total / total * 100) + '</span></div>';
-    }).join('');
+        '<span class="amt">' + money(c.total) + '</span><span class="pct">' + pct(c.total / base * 100) + '</span></div>';
+    }).join('') + (sobreIngreso && restante > 0
+      ? '<div class="row"><span class="sw" style="background:var(--pos)"></span><span class="nm">Restante</span>' +
+        '<span class="amt">' + money(restante) + '</span><span class="pct">' + pct(restante / ing * 100) + '</span></div>'
+      : '');
+
+    var centroV = sobreIngreso ? pct(total / ing * 100) : money0(total);
+    var centroL = sobreIngreso ? 'DEL INGRESO' : nMov + ' MOV';
 
     var top = cats[0];
-    var nota = top && top.unico > 0
-      ? '<b>Ojo con leer «' + esc(top.categoria) + ' ' + pct(top.total / total * 100) + '» como gasto corriente:</b> ' +
+    var unica = top && top.unico > 0;
+    var nota;
+    if (sobreIngreso) {
+      var gastado = total / ing * 100;
+      nota = restante >= 0
+        ? '<b>De tus ' + money0(ing) + ' de ingreso (' + esc(ambito) + ') gastaste ' + pct(gastado) + ', o sea ' + money0(total) +
+          '.</b> Te quedaron ' + money0(restante) + '.'
+        : '<b>Gastaste más de lo que ingresó (' + esc(ambito) + '):</b> ' + money0(total) + ' contra ' + money0(ing) +
+          ' de ingreso, ' + pct(gastado) + '. Te pasaste por ' + money0(-restante) + '.';
+      if (unica) {
+        nota += ' <b>Ojo:</b> ' + money(top.unico) + ' de «' + esc(top.categoria) + '» son compras únicas de más de ' +
+          money0(D.corteCompraGrande) + ' que no se repiten todos los meses.';
+      }
+      // Si el sueldo todavía no entró, casi todo parece gasto de más: se avisa en pantalla.
+      if (mes && mes.enCurso) nota += ' El mes sigue en curso: si el ingreso todavía no entró completo, el porcentaje se ve inflado.';
+    } else if (unica) {
+      nota = '<b>Ojo con leer «' + esc(top.categoria) + ' ' + pct(top.total / total * 100) + '» como gasto corriente:</b> ' +
         money(top.unico) + ' de esos ' + money(top.total) + ' son compras únicas de más de ' + money0(D.corteCompraGrande) +
-        ' que no se repiten todos los meses.'
-      : '<b>' + (mes ? 'En ' + esc(ambito) + ' hubo ' : 'Tus ') + cats.length + ' categorías, ordenadas por peso.</b> El anillo dibuja las ' + segs.length +
+        ' que no se repiten todos los meses.';
+    } else {
+      nota = '<b>' + (mes ? 'En ' + esc(ambito) + ' hubo ' : 'Tus ') + cats.length + ' categorías, ordenadas por peso.</b> El anillo dibuja las ' + segs.length +
         ' principales; el resto se agrupa para que los ángulos chicos sigan siendo legibles.';
+    }
+    // Eligió "Mis ingresos" y este período no tiene: se muestra sobre gastos, y se dice.
+    if (catBase === 'ingreso' && !hayIngreso) {
+      nota = '<b>Sin ingresos registrados en ' + esc(ambito) + ':</b> se muestra el porcentaje sobre tus gastos. ' + nota;
+    }
 
     return '<section class="panel">' +
       '<div class="phead"><h2>En qué se va el gasto</h2><span class="tag">' +
         (mes ? esc(ambito) + (mes.enCurso ? ' · en curso' : '') + ' · ' : '') + cats.length + ' categorías</span></div>' +
-      barra +
+      barra + selBase +
       '<div class="split">' + svg('0 0 220 220',
         '<g transform="rotate(-90 110 110)" fill="none" stroke-width="26">' + anillo + '</g>' +
-        '<text class="dcv" x="110" y="110" text-anchor="middle">' + money0(total) + '</text>' +
-        '<text class="dcl" x="110" y="128" text-anchor="middle">' + nMov + ' MOV</text>',
-        'Gasto por categoría') +
+        '<text class="dcv" x="110" y="110" text-anchor="middle">' + centroV + '</text>' +
+        '<text class="dcl" x="110" y="128" text-anchor="middle">' + centroL + '</text>',
+        sobreIngreso ? 'Gasto por categoría como porcentaje del ingreso' : 'Gasto por categoría') +
       '<div class="catlist">' + lista + '</div></div>' +
       '<div class="read">' + nota + '</div></section>';
   }
@@ -1206,6 +1258,9 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
     });
     [].forEach.call(document.querySelectorAll('.mchip[data-cm]'), function (c) {
       c.addEventListener('click', function () { catMes = Number(c.dataset.cm); pintarPanel(); });
+    });
+    [].forEach.call(document.querySelectorAll('.seg button[data-cbase]'), function (b) {
+      b.addEventListener('click', function () { catBase = b.dataset.cbase; pintarPanel(); });
     });
     // En el celular la barra de meses scrollea, y al repintar el panel vuelve a
     // la posición cero: el mes elegido (justo los recientes, que quedan al final)
