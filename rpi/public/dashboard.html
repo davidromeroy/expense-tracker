@@ -13,7 +13,7 @@
      standalone) y le dan color al status bar / a la barra de tareas de
      Android. No cambian nada en un navegador normal — inofensivos ahí. -->
 <meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-title" content="Finanzas" />
 <meta name="theme-color" content="#0d0f11" />
@@ -345,14 +345,6 @@ html.modal-abierto{overflow:hidden}
 .edet .r{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2);padding:2px 0}
 .edet .r i{width:9px;height:9px;border-radius:3px;flex:0 0 auto}
 .edet .r b{margin-left:auto;color:var(--ink);font-family:var(--mono);font-variant-numeric:tabular-nums}
-/* App instalada en un teléfono: el contenido pasa por debajo de la barra de estado (black-translucent).
-   Con env() solo no alcanzaba: si iOS lo informa en 0, o su desenfoque se extiende más allá de la zona
-   segura, el encabezado queda tapado y difuminado. Acá se garantiza un mínimo fijo (54 px, la barra de un
-   iPhone con isla dinámica) más 12 px de aire, y si env() llega con un valor mayor, se usa ese.
-   Va al final a propósito: tiene que ganarle a los .app de arriba, incluido el de pantallas angostas. */
-@media (display-mode:standalone) and (pointer:coarse){
-  .app{padding-top:calc(max(var(--sat),54px) + 12px)}
-}
 </style>
 </head>
 <body>
