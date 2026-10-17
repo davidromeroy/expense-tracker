@@ -2,7 +2,11 @@
 <html lang="es">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- viewport-fit=cover: sin esto, en la app instalada la página no usa el área bajo la
+     barra de estado y la isla dinámica, y los márgenes de zona segura (env(safe-area-inset-*),
+     abajo en :root) quedan en cero. Con `black-translucent` el contenido SÍ pasa por debajo
+     de la barra de estado, así que los dos van juntos. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Finanzas</title>
 <!-- Agregado a la pantalla de inicio de iOS como si fuera una app: estos
      meta tags sacan la barra de Safari al abrir desde el ícono (modo
@@ -11,7 +15,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Finanzas" />
 <meta name="theme-color" content="#0d0f11" />
+<!-- Ícono de la pantalla de inicio. iOS lo toma al AGREGAR la página, no después: para
+     ver uno nuevo hay que quitarla de la pantalla de inicio y volver a agregarla. -->
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<link rel="icon" type="image/png" href="icons/icon-192.png" />
+<link rel="manifest" href="manifest.webmanifest" />
 <!-- Fuentes vendorizadas en fonts/ (ver fonts.css) — antes venían de
      fonts.googleapis.com directo acá, un <link rel=stylesheet> que bloquea
      el render: con mala señal (datos móviles por Tailscale, wifi débil) el
@@ -33,10 +43,18 @@
 :root{
   --bg:#f1f3f5; --card:#ffffff; --card-2:#f7f9fa; --sunk:#eef1f3;
   --line:#e1e6ea; --line-2:#eef1f4;
-  --ink:#0f1419; --ink-2:#5b656e; --ink-3:#8b949c;
-  --brand:#2a78d6;
+  /* --ink-2 / --ink-3 oscurecidos para cumplir contraste (WCAG AA 4,5:1) sobre fondo, card y
+     card-2: antes --ink-3 daba 2,77–3,08:1 en claro. --warn / --warn-lg: el ámbar de --s4
+     como TEXTO daba 1,95:1; --warn llega a 4,65:1 y --warn-lg a 3:1 para números grandes. */
+  --ink:#0f1419; --ink-2:#4a535b; --ink-3:#686e74;
+  --brand:#2a78d6; --brand-solid:#2976d3;
   --s1:#2a78d6; --s2:#eb6834; --s3:#4a3aa7; --s4:#eda100; --s5:#e87ba4; --mute:#a8afb5;
+  --warn:#936400; --warn-lg:#c28400;
   --pos:#17915f; --neg:#d63a3f;
+  /* Zonas seguras del teléfono (barra de estado, isla dinámica, indicador de inicio).
+     En un navegador normal valen 0 y el layout queda como siempre. */
+  --sat:env(safe-area-inset-top,0px); --sar:env(safe-area-inset-right,0px);
+  --sab:env(safe-area-inset-bottom,0px); --sal:env(safe-area-inset-left,0px);
   --shadow:0 1px 2px rgba(15,20,25,.05),0 4px 14px rgba(15,20,25,.05);
   --dsp:"Archivo",-apple-system,BlinkMacSystemFont,sans-serif;
   --ui:"Manrope",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
@@ -45,49 +63,51 @@
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#0d0f11; --card:#16191c; --card-2:#1b1f23; --sunk:#121517;
   --line:#252b30; --line-2:#1e2327;
-  --ink:#f2f5f7; --ink-2:#9aa3ab; --ink-3:#6b747c;
-  --brand:#3987e5;
+  --ink:#f2f5f7; --ink-2:#9aa3ab; --ink-3:#7f878e;
+  --brand:#3987e5; --brand-solid:#3277cb;
   --s1:#3987e5; --s2:#d95926; --s3:#9085e9; --s4:#c98500; --s5:#d55181; --mute:#5c646b;
+  --warn:#c98500; --warn-lg:#c98500;
   --pos:#1fae74; --neg:#e5484d;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.25);
 }}
 :root[data-theme="dark"]{
   --bg:#0d0f11; --card:#16191c; --card-2:#1b1f23; --sunk:#121517;
   --line:#252b30; --line-2:#1e2327;
-  --ink:#f2f5f7; --ink-2:#9aa3ab; --ink-3:#6b747c;
-  --brand:#3987e5;
+  --ink:#f2f5f7; --ink-2:#9aa3ab; --ink-3:#7f878e;
+  --brand:#3987e5; --brand-solid:#3277cb;
   --s1:#3987e5; --s2:#d95926; --s3:#9085e9; --s4:#c98500; --s5:#d55181; --mute:#5c646b;
+  --warn:#c98500; --warn-lg:#c98500;
   --pos:#1fae74; --neg:#e5484d;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.25);
 }
 *{box-sizing:border-box}
-html{color-scheme:light dark}
+html{color-scheme:light dark;background:var(--bg);-webkit-tap-highlight-color:transparent}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
-.app{max-width:900px;margin:0 auto;padding:24px 16px 44px}
+.app{max-width:900px;margin:0 auto;padding:max(24px,calc(var(--sat) + 10px)) max(16px,var(--sar)) max(44px,calc(var(--sab) + 16px)) max(16px,var(--sal))}
 
-.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.eyebrow button{font:inherit;letter-spacing:inherit;text-transform:inherit;background:none;border:0;color:var(--ink-3);cursor:pointer;padding:0}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.eyebrow button{font:inherit;letter-spacing:inherit;text-transform:inherit;background:none;border:0;color:var(--ink-3);cursor:pointer;padding:0;position:relative}
 .eyebrow button:hover{color:var(--ink)}
 .eyebrow button:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 
 .ledger{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px}
 .led{flex:1 1 158px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 15px 14px}
-.led dt{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin:0 0 7px}
+.led dt{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin:0 0 7px}
 .led dd{margin:0;font-family:var(--dsp);font-weight:800;font-size:25px;letter-spacing:-.025em;line-height:1;font-variant-numeric:tabular-nums}
 .led dd span{font-size:.55em;font-weight:700;color:var(--ink-3)}
-.led p{margin:7px 0 0;font-family:var(--mono);font-size:10px;color:var(--ink-3);line-height:1.4}
-.led.in dd{color:var(--pos)} .led.out dd{color:var(--neg)} .led.inv dd{color:var(--s3)} .led.sal dd{color:var(--s4)}
-.led.fon dd{color:var(--s4)} .led.liq dd{color:var(--s1)}
+.led p{margin:7px 0 0;font-family:var(--mono);font-size:11px;color:var(--ink-3);line-height:1.4}
+.led.in dd{color:var(--pos)} .led.out dd{color:var(--neg)} .led.inv dd{color:var(--s3)} .led.sal dd{color:var(--warn-lg)}
+.led.fon dd{color:var(--warn-lg)} .led.liq dd{color:var(--s1)}
 .led.pat{background:var(--card-2);border-color:var(--ink-3)}
 .led.tgl{cursor:pointer;transition:border-color .16s,background .16s}
 .led.tgl:hover{border-color:var(--ink-3)}
 .led.tgl:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 .led dt .swap{font-style:normal;color:var(--ink-3);font-size:11px;margin-left:2px}
 .led.tgl:hover dt .swap{color:var(--brand)}
-.srcline{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin:10px 0 14px;line-height:1.7}
+.srcline{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);margin:10px 0 14px;line-height:1.7}
 .srcline b{color:var(--ink-2);font-weight:500}
 
-.chipbar{display:flex;gap:8px;overflow-x:auto;padding:2px 0 14px;scrollbar-width:none}
+.chipbar{display:flex;gap:8px;overflow-x:auto;padding:3px 0 14px;margin-top:-1px;scrollbar-width:none}
 .chipbar::-webkit-scrollbar{display:none}
 .chip{flex:0 0 auto;font-family:var(--ui);font-size:13px;font-weight:600;padding:9px 15px;min-height:40px;border-radius:999px;
   border:1px solid var(--line);background:var(--card);color:var(--ink-2);cursor:pointer;
@@ -102,12 +122,12 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);font-s
 @keyframes in{from{opacity:.4;transform:translateY(4px)}to{opacity:1;transform:none}}
 .phead{display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:18px 20px 4px}
 .phead h2{font-family:var(--dsp);font-weight:700;font-size:19px;letter-spacing:-.015em;margin:0}
-.tag{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:4px 9px;border-radius:6px;background:var(--card-2);color:var(--ink-3);border:1px solid var(--line)}
-.tag.warn{color:var(--s4);border-color:var(--s4)}
+.tag{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:4px 9px;border-radius:6px;background:var(--card-2);color:var(--ink-3);border:1px solid var(--line)}
+.tag.warn{color:var(--warn);border-color:var(--warn)}
 /* Para el mensaje de error de sync: `.tag` fuerza mayúsculas y va bien para
    una etiqueta corta ("⚠ SIN ACTUALIZAR"), pero una oración completa del
    error real (puede traer una ruta de archivo) en mayúsculas es ilegible. */
-.syncerr{display:block;margin-top:4px;font-family:var(--mono);font-size:10.5px;color:var(--s4);text-transform:none}
+.syncerr{display:block;margin-top:4px;font-family:var(--mono);font-size:11.5px;color:var(--warn);text-transform:none}
 
 .plot{padding:10px 20px 2px;overflow-x:auto;position:relative}
 .plot svg{display:block;width:100%;height:auto}
@@ -122,10 +142,10 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);font-s
 .read b{color:var(--ink);font-weight:700}
 
 .tools{display:flex;align-items:center;gap:9px;padding:6px 20px 0;flex-wrap:wrap}
-.tools .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.tools .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
 .seg{display:inline-flex;background:var(--card-2);border:1px solid var(--line);border-radius:9px;padding:3px}
 .seg button{font-family:var(--ui);font-weight:600;font-size:12.5px;padding:6px 13px;min-height:32px;border:0;background:transparent;color:var(--ink-3);cursor:pointer;border-radius:6px;transition:background .16s,color .16s}
-.seg button[aria-pressed="true"],.seg button[aria-checked="true"]{background:var(--brand);color:#fff}
+.seg button[aria-pressed="true"],.seg button[aria-checked="true"]{background:var(--brand-solid);color:#fff}
 .seg button:disabled{opacity:.4;cursor:not-allowed}
 .seg button:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
 
@@ -137,7 +157,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);font-s
   background-repeat:no-repeat;background-position:right 9px center}
 .tools.det input[type="search"]{flex:1 1 160px;min-width:120px}
 .tools.det select:focus-visible,.tools.det input:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
-th.ord{cursor:pointer;user-select:none}
+th.ord{cursor:pointer;user-select:none;position:relative}
+th.ord::after{content:"";position:absolute;inset:-8px 0}
 th.ord:hover{color:var(--ink)}
 th.ord.on{color:var(--ink)}
 th.ord:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
@@ -148,7 +169,7 @@ th.ord:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
   border:1px solid var(--line);border-radius:10px;padding:9px 12px;resize:vertical;min-height:38px}
 .ask textarea:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
 .ask button{font-family:var(--ui);font-weight:600;font-size:13px;padding:9px 16px;border-radius:9px;
-  border:1px solid var(--brand);background:var(--brand);color:#fff;cursor:pointer;white-space:nowrap;align-self:stretch}
+  border:1px solid var(--brand-solid);background:var(--brand-solid);color:#fff;cursor:pointer;white-space:nowrap;align-self:stretch}
 .ask button:disabled{opacity:.6;cursor:default}
 .ask button:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 #askHist{display:flex;flex-direction:column;gap:10px;padding:14px 20px 0}
@@ -158,18 +179,18 @@ th.ord:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
 .qa .sql{display:block;margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--ink-3);
   white-space:pre-wrap;word-break:break-word}
 
-.mesbar{display:flex;gap:6px;overflow-x:auto;padding:10px 20px 2px;scrollbar-width:none}
+.mesbar{display:flex;gap:6px;overflow-x:auto;padding:10px 20px 8px;margin-bottom:-6px;scrollbar-width:none}
 .mesbar::-webkit-scrollbar{display:none}
 .mchip{flex:0 0 auto;font-family:var(--ui);font-size:12px;font-weight:600;padding:6px 12px;min-height:32px;border-radius:8px;
   border:1px solid var(--line);background:var(--card-2);color:var(--ink-3);cursor:pointer;transition:background .16s,color .16s,border-color .16s}
 .mchip:hover{color:var(--ink);border-color:var(--ink-3)}
-.mchip[aria-selected="true"]{background:var(--brand);color:#fff;border-color:var(--brand)}
+.mchip[aria-selected="true"]{background:var(--brand-solid);color:#fff;border-color:var(--brand-solid)}
 .mchip:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 .sparkbar{cursor:pointer}
 
 .tip{position:absolute;top:14px;transform:translateX(-50%);background:var(--card-2);border:1px solid var(--line);
   border-radius:10px;padding:9px 11px;box-shadow:var(--shadow);pointer-events:none;z-index:5;min-width:140px}
-.tip h4{margin:0 0 7px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.tip h4{margin:0 0 7px;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
 .tip .r{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;color:var(--ink-2);margin-top:3px}
 .tip .r i{width:8px;height:8px;border-radius:2px;flex:0 0 auto}
 .tip .r b{margin-left:auto;color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
@@ -216,7 +237,7 @@ table{border-collapse:collapse;width:100%;font-size:12.5px}
 th,td{padding:6px 10px;border-bottom:1px solid var(--line-2);text-align:right;white-space:nowrap}
 th:first-child,td:first-child{text-align:left;padding-left:0;white-space:normal}
 td:last-child,th:last-child{padding-right:0}
-thead th{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:500;border-bottom:1px solid var(--line)}
+thead th{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:500;border-bottom:1px solid var(--line)}
 td.num{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums}
 tbody tr:last-child td{border-bottom:none}
 /* Nota (Detalle): antes nowrap, empujaba la tabla a un scroll horizontal
@@ -230,7 +251,7 @@ td.nota{white-space:normal;text-align:left;max-width:220px;font-size:11.5px;colo
 .state h2{font-family:var(--dsp);font-size:18px;margin:0 0 8px;color:var(--ink)}
 .state p{margin:0 auto;max-width:46ch;font-size:13.5px}
 .state code{font-family:var(--mono);font-size:12px}
-.state button{margin-top:16px;font-family:var(--ui);font-weight:600;font-size:13px;padding:9px 18px;border-radius:9px;border:1px solid var(--brand);background:var(--brand);color:#fff;cursor:pointer}
+.state button{margin-top:16px;font-family:var(--ui);font-weight:600;font-size:13px;padding:9px 18px;border-radius:9px;border:1px solid var(--brand-solid);background:var(--brand-solid);color:#fff;cursor:pointer}
 .state button:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
 .spin{width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--brand);border-radius:50%;margin:0 auto 14px;animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -245,6 +266,22 @@ svg text{font-family:var(--mono);fill:var(--ink-2)}
 .zero{stroke:var(--ink-3);stroke-width:1}
 .ring{stroke:var(--card);stroke-width:2}
 [hidden]{display:none!important}
+/* ---- zona de toque de 44 px (guía de Apple) sin cambiar el tamaño que se ve ----
+   Se agranda con un pseudo-elemento invisible: el chip o botón se ve igual. Los márgenes de
+   .chipbar y .mesbar ya reservan ese aire (por eso .mesbar compensa con margin-bottom). */
+.chip,.mchip,.seg button{position:relative}
+.chip::after{content:"";position:absolute;inset:-3px 0}
+.mchip::after{content:"";position:absolute;inset:-7px -2px}
+.seg button::after{content:"";position:absolute;inset:-6px 0}
+.eyebrow button::after{content:"";position:absolute;inset:-15px -10px}
+/* Respuesta al tocar: sin esto, quitar el destello gris de iOS dejaría los botones mudos. */
+.chip:active,.mchip:active,.seg button:active,.eyebrow button:active{opacity:.65}
+/* En pantalla táctil los campos de Detalle y la caja de Preguntas llegan a 44 px y a 16 px de
+   letra: con menos, iOS hace zoom solo al enfocar el campo y la página queda ampliada. */
+@media (pointer:coarse){
+  .tools.det select,.tools.det input[type="search"]{min-height:44px;font-size:16px}
+  .ask textarea{font-size:16px;min-height:44px}
+}
 /* ---- modal: gastos de una categoría ---- */
 .modal{padding:0;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--ink);
   width:min(560px,calc(100vw - 24px));max-height:min(80vh,680px);box-shadow:0 24px 60px rgba(0,0,0,.45)}
@@ -265,18 +302,20 @@ html.modal-abierto{overflow:hidden}
 .mrow .md{color:var(--ink-2);min-width:0;overflow-wrap:anywhere}
 .mrow .md small{display:block;margin-top:2px;font-size:11.5px;color:var(--ink-3)}
 .mrow .mm{font-family:var(--dsp);font-weight:700;font-size:13.5px;color:var(--ink);font-variant-numeric:tabular-nums;text-align:right}
-.mrow .unica{display:inline-block;margin-left:6px;font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;
-  padding:2px 6px;border-radius:5px;color:var(--s4);border:1px solid var(--s4);vertical-align:1px}
+.mrow .unica{display:inline-block;margin-left:6px;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  padding:2px 6px;border-radius:5px;color:var(--warn);border:1px solid var(--warn);vertical-align:1px}
 .mfoot{display:flex;justify-content:space-between;gap:12px;padding:13px 20px 16px;border-top:1px solid var(--line);font-size:13px;color:var(--ink-2)}
 .mfoot b{font-family:var(--dsp);color:var(--ink);font-variant-numeric:tabular-nums}
 .mmsg{margin:0;padding:26px 0;text-align:center;color:var(--ink-3);font-size:13px}
 .mrow .sn{font-style:normal;color:var(--ink-3)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 @media (max-width:520px){
-  .app{padding:20px 12px 40px}
+  .app{padding:max(20px,calc(var(--sat) + 10px)) max(12px,var(--sar)) max(40px,calc(var(--sab) + 16px)) max(12px,var(--sal))}
   .plot{padding:10px 12px 2px}
   .phead,.legend,.tools,.gauges,.specs,.split,.mesbar,.tablewrap{padding-left:12px;padding-right:12px}
   .read{margin-left:12px;margin-right:12px}
+  /* 11 px con el tracking de escritorio (.16em) empujaba "Sincronizar" a una 2.ª línea: se afloja solo acá */
+  .eyebrow{letter-spacing:.09em}
 }
 </style>
 </head>
