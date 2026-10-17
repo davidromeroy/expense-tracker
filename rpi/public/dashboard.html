@@ -318,6 +318,33 @@ html.modal-abierto{overflow:hidden}
   /* 11 px con el tracking de escritorio (.16em) empujaba "Sincronizar" a una 2.ª línea: se afloja solo acá */
   .eyebrow{letter-spacing:.09em}
 }
+/* Métodos: lista única */
+.met-list{display:flex;flex-direction:column;gap:14px;margin:14px 0 4px;padding:0 12px}
+.met-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.met-nom{font-size:14px;font-weight:600;color:var(--ink)}
+.met-val{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.met-val small{font-size:11px;font-weight:500;color:var(--ink-2)}
+.met-bar{height:8px;border-radius:4px;background:var(--line);margin:6px 0 5px;overflow:hidden}
+.met-bar i{display:block;height:100%;border-radius:4px}
+.met-sub{font-size:11px;color:var(--ink-2)}
+/* Evolución: barras apiladas por mes */
+.escroll{overflow-x:auto;margin:14px 0 8px;-webkit-overflow-scrolling:touch}
+.ecols{display:flex;gap:6px;min-width:100%;width:max-content;align-items:flex-end}
+.ecol{flex:1 0 40px;display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:0;padding:4px 0;cursor:pointer;color:var(--ink-2);font:inherit;position:relative}
+.ecol::after{content:"";position:absolute;inset:-4px -3px}
+.etot{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.estack{display:flex;flex-direction:column-reverse;justify-content:flex-start;height:150px;width:100%;max-width:34px;border-radius:5px;overflow:hidden;opacity:.55}
+.estack i{display:block;width:100%}
+.ecol[aria-pressed="true"] .estack{opacity:1;outline:2px solid var(--ink-3);outline-offset:2px}
+.ecol[data-curso="1"] .estack{opacity:.35}
+.ecol[data-curso="1"][aria-pressed="true"] .estack{opacity:.7}
+.emes{font-size:11px;font-weight:600}
+.ecol:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.edet{background:var(--card-2);border-radius:10px;padding:10px 12px;margin:6px 0 10px}
+.edet h4{margin:0 0 6px;font-size:13px;color:var(--ink)}
+.edet .r{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2);padding:2px 0}
+.edet .r i{width:9px;height:9px;border-radius:3px;flex:0 0 auto}
+.edet .r b{margin-left:auto;color:var(--ink);font-family:var(--mono);font-variant-numeric:tabular-nums}
 /* App instalada en un teléfono: el contenido pasa por debajo de la barra de estado (black-translucent).
    Con env() solo no alcanzaba: si iOS lo informa en 0, o su desenfoque se extiende más allá de la zona
    segura, el encabezado queda tapado y difuminado. Acá se garantiza un mínimo fijo (54 px, la barra de un
@@ -409,7 +436,9 @@ html.modal-abierto{overflow:hidden}
   var catMes = -1;   // -1 = todo; mes elegido en Categorías (independiente de mesSel y detFiltro.mes)
   var catBase = 'gasto'; // Categorías: el % se calcula sobre 'gasto' (suma 100%) o sobre 'ingreso' (no suma 100%)
   var catSegs = [];      // porciones del anillo de Categorías tal como se pintaron; el clic las resuelve por índice
-  var modoEvo = 'mov';
+  var modoEvo = 'usd';
+  var metMes = -1;   // mes elegido en Métodos (-1 = todo)
+  var evoSel = -1;   // mes resaltado en Evolución (-1 = el último)
   var verFondo = false;     // tarjeta Invertido <-> Fondo de emergencia
   var verLiquidez = false;  // tarjeta Neto <-> Liquidez
 
@@ -760,41 +789,59 @@ html.modal-abierto{overflow:hidden}
   })();
 
   // ---------- panel: métodos ----------
+  // Una sola lista (no dos gráficos): barra = dólares, y al lado cuánto pesa en cantidad y el
+  // ticket promedio. Los dos rankings se contradicen y esa es la lectura: tiene que verse en la misma fila.
+  function metodosDe(mes) {
+    var src = mes ? mes.metodos : null;
+    var lista = src
+      ? Object.keys(src).map(function (k) { return { metodo: k, total: src[k].total, n: src[k].n }; })
+      : D.porMetodo.map(function (m) { return { metodo: m.metodo, total: m.total, n: m.n }; });
+    return lista.map(function (m) { m.ticket = m.n ? m.total / m.n : 0; return m; })
+      .sort(function (a, b) { return b.total - a.total; });
+  }
+
   function panelMetodos() {
-    var ms = D.porMetodo;
+    var meses = D.metodosMes;
+    if (metMes >= meses.length) metMes = -1;
+    var mes = metMes < 0 ? null : meses[metMes];
+    var ms = metodosDe(mes);
+    var ambito = mes ? cap(nombreMes(mes.mes)) : 'todo el período';
+    var chips = '<button class="mchip" data-mm="-1" role="tab" aria-selected="' + (metMes < 0) + '">Todo</button>' +
+      meses.map(function (m, i) {
+        return '<button class="mchip" data-mm="' + i + '" role="tab" aria-selected="' + (metMes === i) + '">' +
+          cap(nombreMes(m.mes, true)) + '</button>';
+      }).join('');
+    var barra = '<div class="mesbar" role="tablist" aria-label="Período">' + chips + '</div>';
+
     var totalV = ms.reduce(function (a, m) { return a + m.total; }, 0);
     var totalN = ms.reduce(function (a, m) { return a + m.n; }, 0);
-    var maxV = Math.max.apply(null, ms.map(function (m) { return m.total; }));
-    var maxN = Math.max.apply(null, ms.map(function (m) { return m.n; }));
-    var y = 42, filas = '';
-    ms.forEach(function (m) {
-      var c = colorMetodo(m.metodo);
-      filas +=
-        '<text class="rowlab" x="112" y="' + (y + 12) + '" text-anchor="end">' + esc(m.metodo.replace('Tarjeta de ', 'T. ')) + '</text>' +
-        '<rect x="122" y="' + y + '" width="' + Math.max(6, m.total / maxV * 180).toFixed(1) + '" height="16" rx="4" fill="var(' + c + ')"/>' +
-        '<text class="val" x="406" y="' + (y + 12) + '" text-anchor="end">' + money0(m.total) + ' · ' + pct(m.total / totalV * 100) + '</text>' +
-        '<rect x="452" y="' + y + '" width="' + Math.max(6, m.n / maxN * 200).toFixed(1) + '" height="16" rx="4" fill="var(' + c + ')"/>' +
-        '<text class="val" x="758" y="' + (y + 12) + '" text-anchor="end">' + m.n + ' · ' + pct(m.n / totalN * 100) + '</text>';
-      y += 32;
-    });
+    if (!totalV) {
+      return '<section class="panel"><div class="phead"><h2>Con qué pagás</h2><span class="tag">' + esc(ambito) + '</span></div>' +
+        barra + '<div class="read">Sin gastos en ' + esc(ambito) + '.</div></section>';
+    }
+    var maxV = ms[0].total;
 
-    var porPlata = ms[0];
+    var filas = ms.map(function (m) {
+      var c = colorMetodo(m.metodo);
+      return '<div class="met-row">' +
+        '<div class="met-top"><span class="met-nom">' + esc(m.metodo.replace('Tarjeta de ', 'T. ')) + '</span>' +
+        '<span class="met-val">' + money0(m.total) + ' <small>' + pct(m.total / totalV * 100) + '</small></span></div>' +
+        '<div class="met-bar"><i style="width:' + Math.max(1.5, m.total / maxV * 100).toFixed(1) + '%;background:var(' + c + ')"></i></div>' +
+        '<div class="met-sub">' + m.n + ' mov. · ' + pct(m.n / totalN * 100) + ' de la cantidad · ticket ' + money(m.ticket) + '</div></div>';
+    }).join('');
+
     var porFrec = ms.slice().sort(function (a, b) { return b.n - a.n; })[0];
+    var porPlata = ms[0];
     var lectura = porPlata.metodo === porFrec.metodo
       ? '<b>' + esc(porPlata.metodo) + ' manda en las dos medidas:</b> ' + pct(porPlata.total / totalV * 100) +
         ' de los dólares y ' + pct(porPlata.n / totalN * 100) + ' de los movimientos.'
-      : '<b>La pregunta tiene dos respuestas opuestas.</b> En dólares manda ' + esc(porPlata.metodo) + ' (' +
-        pct(porPlata.total / totalV * 100) + '), pero en cantidad de movimientos manda ' + esc(porFrec.metodo) +
-        ' (' + pct(porFrec.n / totalN * 100) + '). Tickets: ' + money(porPlata.ticket) + ' contra ' + money(porFrec.ticket) +
-        '. El primero es el canal de las cosas grandes; el segundo es tu día a día.';
+      : '<b>Dos respuestas opuestas.</b> En dólares manda ' + esc(porPlata.metodo) + ' (' + pct(porPlata.total / totalV * 100) +
+        '), en cantidad ' + esc(porFrec.metodo) + ' (' + pct(porFrec.n / totalN * 100) + '). Ticket: ' + money(porPlata.ticket) +
+        ' contra ' + money(porFrec.ticket) + ': uno es el canal de las cosas grandes, el otro tu día a día.';
 
     return '<section class="panel">' +
-      '<div class="phead"><h2>Dólares contra movimientos</h2><span class="tag">' + ms.length + ' métodos</span></div>' +
-      '<div class="plot wide">' + svg('0 0 760 ' + (y + 24),
-        '<text class="hdr" x="122" y="16">DÓLARES</text><text class="hdr" x="452" y="16">MOVIMIENTOS</text>' + filas +
-        '<text class="note" x="122" y="' + (y + 18) + '">Mismo orden de filas en los dos paneles: la inversión se lee de un vistazo.</text>',
-        'Métodos de pago por dólares y por movimientos') + '</div>' +
-      '<div class="read">' + lectura + '</div></section>';
+      '<div class="phead"><h2>Con qué pagás</h2><span class="tag">' + esc(ambito) + '</span></div>' +
+      barra + '<div class="met-list">' + filas + '</div><div class="read">' + lectura + '</div></section>';
   }
 
   // ---------- panel: neto mensual ----------
@@ -1024,70 +1071,52 @@ html.modal-abierto{overflow:hidden}
   }
 
   // ---------- panel: evolución ----------
+  // Una barra por mes, apilada por método: se ve cómo cambia la mezcla sin 6 líneas cruzadas.
+  // HTML y no SVG para que el texto no se achique en el teléfono.
   function panelEvolucion() {
-    var mm = D.metodosMes.filter(function (m) { return !m.enCurso; });
-    var metodos = D.porMetodo.slice(0, 4).map(function (m) { return m.metodo; });
+    var mm = D.metodosMes;
+    var metodos = D.porMetodo.map(function (m) { return m.metodo; });
     var campo = modoEvo === 'mov' ? 'n' : 'total';
     var valor = function (m, met) { return (m.metodos[met] || {})[campo] || 0; };
-    var max = Math.max.apply(null, mm.map(function (m) {
-      return Math.max.apply(null, metodos.map(function (met) { return valor(m, met); }));
-    })) || 1;
-    var ticks = ticksDe(max, 3), tope = ticks[ticks.length - 1];
-    var top = 34, alto = 162, n = mm.length;
-    var paso = n > 1 ? 636 / (n - 1) : 0;
-    var px = function (i) { return 64 + i * paso; };
-    var py = function (v) { return top + alto - v / tope * alto; };
+    var totales = mm.map(function (m) {
+      return metodos.reduce(function (a, met) { return a + valor(m, met); }, 0);
+    });
+    var max = Math.max.apply(null, totales) || 1;
+    var fmt = function (v) { return modoEvo === 'mov' ? String(v) : money0(v); };
+    if (evoSel >= mm.length) evoSel = -1;
+    var sel = evoSel < 0 ? mm.length - 1 : evoSel;
 
-    var ejes = ticks.map(function (t) {
-      var y = py(t);
-      return '<line class="grid" x1="64" y1="' + y.toFixed(1) + '" x2="700" y2="' + y.toFixed(1) + '"/>' +
-        '<text class="ax" x="56" y="' + (y + 4).toFixed(1) + '" text-anchor="end">' +
-        (modoEvo === 'mov' ? t : money0(t)) + '</text>';
+    var cols = mm.map(function (m, i) {
+      var segs = metodos.map(function (met) {
+        var v = valor(m, met);
+        return v ? '<i style="height:' + (v / max * 100).toFixed(2) + '%;background:var(' + colorMetodo(met) + ')"></i>' : '';
+      }).join('');
+      return '<button type="button" class="ecol" data-es="' + i + '" aria-pressed="' + (sel === i) + '"' +
+        (m.enCurso ? ' data-curso="1"' : '') + ' aria-label="' + esc(cap(nombreMes(m.mes)) + ': ' + fmt(totales[i])) + '">' +
+        '<span class="etot">' + fmt(totales[i]) + '</span><span class="estack">' + segs + '</span>' +
+        '<span class="emes">' + cap(nombreMes(m.mes, true)) + (m.enCurso ? '*' : '') + '</span></button>';
     }).join('');
 
-    var lineas = metodos.map(function (met) {
-      var pts = mm.map(function (m, i) { return px(i).toFixed(1) + ',' + py(valor(m, met)).toFixed(1); }).join(' ');
-      return '<polyline fill="none" stroke="var(' + colorMetodo(met) + ')" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" points="' + pts + '"/>' +
-        mm.map(function (m, i) {
-          return '<circle cx="' + px(i).toFixed(1) + '" cy="' + py(valor(m, met)).toFixed(1) + '" r="3" fill="var(' + colorMetodo(met) + ')" class="ring"/>';
-        }).join('');
-    }).join('');
-
-    var hits = mm.map(function (m, i) {
-      return '<rect class="hit" data-i="' + i + '" x="' + (px(i) - paso / 2).toFixed(1) + '" y="' + top +
-        '" width="' + Math.max(paso, 30).toFixed(1) + '" height="' + alto + '"/>';
-    }).join('');
-
-    var ejeX = mm.map(function (m, i) {
-      return '<text class="ax" x="' + px(i).toFixed(1) + '" y="' + (top + alto + 22) + '" text-anchor="middle">' + nombreMes(m.mes, true) + '</text>';
-    }).join('');
-
-    var leyenda = metodos.map(function (met) {
-      return '<span><i style="background:var(' + colorMetodo(met) + ')"></i>' + esc(met.replace('Tarjeta de ', 'T. ')) + '</span>';
-    }).join('');
-
-    var primero = mm[0], ultimo = mm[n - 1];
-    var creció = metodos.map(function (met) {
-      return { met: met, d: valor(ultimo, met) - valor(primero, met) };
-    }).sort(function (a, b) { return b.d - a.d; })[0];
+    var m = mm[sel];
+    var detalle = metodos.map(function (met) { return { met: met, v: valor(m, met) }; })
+      .filter(function (f) { return f.v; }).sort(function (a, b) { return b.v - a.v; })
+      .map(function (f) {
+        return '<div class="r"><i style="background:var(' + colorMetodo(f.met) + ')"></i>' +
+          esc(f.met.replace('Tarjeta de ', 'T. ')) + '<b>' + fmt(f.v) + (modoEvo === 'mov' ? ' mov.' : '') + '</b></div>';
+      }).join('');
 
     return '<section class="panel">' +
-      '<div class="phead"><h2>Cómo cambian tus métodos de pago</h2><span class="tag">meses cerrados</span></div>' +
+      '<div class="phead"><h2>Cómo cambia la mezcla</h2><span class="tag">por mes</span></div>' +
       '<div class="tools"><span class="lbl">Medir en</span><div class="seg" role="group" aria-label="Unidad">' +
-      '<button type="button" data-modo="mov" aria-pressed="' + (modoEvo === 'mov') + '">Movimientos</button>' +
-      '<button type="button" data-modo="usd" aria-pressed="' + (modoEvo === 'usd') + '">Dólares</button></div>' +
-      '<span class="lbl" style="margin-left:auto">Pasá el dedo o el mouse</span></div>' +
-      '<div class="plot wide" id="evoWrap">' + svg('0 0 760 ' + (top + alto + 40),
-        ejes + '<line id="cross" x1="0" y1="' + top + '" x2="0" y2="' + (top + alto) + '" stroke="var(--ink-3)" stroke-width="1" opacity="0"/>' +
-        lineas + ejeX + '<g>' + hits + '</g>',
-        'Evolución mensual por método de pago') +
-      '<div class="tip" id="tip" hidden></div></div>' +
-      '<div class="legend">' + leyenda + '</div>' +
-      '<div class="read">' + (creció && creció.d > 0
-        ? '<b>' + esc(creció.met) + ' es el que más creció</b> entre ' + nombreMes(primero.mes) + ' y ' + nombreMes(ultimo.mes) +
-          ': ' + (modoEvo === 'mov' ? '+' + creció.d + ' movimientos' : '+' + money0(creció.d)) + '. ' +
-          'Ojo que las dos medidas cuentan historias distintas: probá el otro botón.'
-        : 'Ningún método creció de forma sostenida en el período.') + '</div></section>';
+      '<button type="button" data-modo="usd" aria-pressed="' + (modoEvo === 'usd') + '">Dólares</button>' +
+      '<button type="button" data-modo="mov" aria-pressed="' + (modoEvo === 'mov') + '">Movimientos</button></div></div>' +
+      '<div class="escroll"><div class="ecols">' + cols + '</div></div>' +
+      '<div class="edet"><h4>' + esc(cap(nombreMes(m.mes))) + (m.enCurso ? ' · en curso' : '') + '</h4>' + (detalle || '<div class="r">Sin gastos</div>') + '</div>' +
+      '<div class="legend">' + metodos.map(function (met) {
+        return '<span><i style="background:var(' + colorMetodo(met) + ')"></i>' + esc(met.replace('Tarjeta de ', 'T. ')) + '</span>';
+      }).join('') + '</div>' +
+      (mm.some(function (x) { return x.enCurso; }) ? '<div class="read">* mes en curso, todavía no cerró.</div>' : '') +
+      '</section>';
   }
 
   // ---------- panel: detalle (tabla filtrable) ----------
@@ -1427,6 +1456,12 @@ html.modal-abierto{overflow:hidden}
     [].forEach.call(document.querySelectorAll('.mchip[data-m]'), function (c) {
       c.addEventListener('click', function () { mesSel = Number(c.dataset.m); pintarPanel(); });
     });
+    [].forEach.call(document.querySelectorAll('.mchip[data-mm]'), function (c) {
+      c.addEventListener('click', function () { metMes = Number(c.dataset.mm); pintarPanel(); });
+    });
+    [].forEach.call(document.querySelectorAll('.ecol[data-es]'), function (c) {
+      c.addEventListener('click', function () { evoSel = Number(c.dataset.es); pintarPanel(); });
+    });
     [].forEach.call(document.querySelectorAll('.mchip[data-cm]'), function (c) {
       c.addEventListener('click', function () { catMes = Number(c.dataset.cm); pintarPanel(); });
     });
@@ -1452,6 +1487,12 @@ html.modal-abierto{overflow:hidden}
     // cada uno por separado.
     centrarChipElegido('.mchip[data-m]');   // Resumen
     centrarChipElegido('.mchip[data-cm]');  // Categorías
+    centrarChipElegido('.mchip[data-mm]');  // Métodos
+    var ec = document.querySelector('.ecol[aria-pressed="true"]');   // Evolución: barra activa a la vista
+    if (ec) {
+      var sc = ec.closest('.escroll'), sb = sc.getBoundingClientRect(), er = ec.getBoundingClientRect();
+      sc.scrollLeft += (er.left - sb.left) - (sb.width - er.width) / 2;
+    }
     centrarChipElegido('.mchip[data-dm]');  // Detalle
     [].forEach.call(document.querySelectorAll('.sparkbar'), function (r) {
       r.addEventListener('click', function () { mesSel = Number(r.dataset.i); pintarPanel(); });
@@ -1460,8 +1501,6 @@ html.modal-abierto{overflow:hidden}
       b.addEventListener('click', function () { modoEvo = b.dataset.modo; pintarPanel(); });
     });
 
-    var wrap = document.getElementById('evoWrap');
-    if (wrap) conectarTooltip(wrap);
 
     // ---- panel Detalle: filtros, orden, búsqueda ----
     if (document.getElementById('detBody')) {
@@ -1500,39 +1539,6 @@ html.modal-abierto{overflow:hidden}
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); preguntar(); }
       });
     }
-  }
-
-  function conectarTooltip(wrap) {
-    var tip = document.getElementById('tip'), cross = document.getElementById('cross');
-    var mm = D.metodosMes.filter(function (m) { return !m.enCurso; });
-    var metodos = D.porMetodo.slice(0, 4).map(function (m) { return m.metodo; });
-    var campo = modoEvo === 'mov' ? 'n' : 'total';
-    var n = mm.length, paso = n > 1 ? 636 / (n - 1) : 0;
-
-    function mostrar(i) {
-      var m = mm[i];
-      var filas = metodos.map(function (met) {
-        return { met: met, v: (m.metodos[met] || {})[campo] || 0 };
-      }).sort(function (a, b) { return b.v - a.v; });
-      tip.innerHTML = '<h4>' + nombreMes(m.mes) + '</h4>' + filas.map(function (f) {
-        return '<div class="r"><i style="background:var(' + colorMetodo(f.met) + ')"></i>' +
-          esc(f.met.replace('Tarjeta de ', 'T. ')) + '<b>' +
-          (campo === 'n' ? f.v + ' mov' : money(f.v)) + '</b></div>';
-      }).join('');
-      tip.hidden = false;
-      var x = 64 + i * paso;
-      tip.style.left = Math.min(Math.max(x / 760 * 100, 15), 85) + '%';
-      cross.setAttribute('x1', x); cross.setAttribute('x2', x);
-      cross.setAttribute('opacity', '.45');
-    }
-    function ocultar() { tip.hidden = true; cross.setAttribute('opacity', '0'); }
-
-    [].forEach.call(wrap.querySelectorAll('.hit'), function (r) {
-      r.addEventListener('mouseenter', function () { mostrar(Number(r.dataset.i)); });
-      r.addEventListener('touchstart', function (e) { e.preventDefault(); mostrar(Number(r.dataset.i)); }, { passive: false });
-    });
-    wrap.addEventListener('mouseleave', ocultar);
-    wrap.addEventListener('touchend', ocultar);
   }
 
   // ---------- carga ----------
