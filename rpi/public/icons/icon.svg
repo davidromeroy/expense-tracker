@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+<title>Finanzas</title>
+<defs>
+<linearGradient id="fondo" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b0e12"/><stop offset="1" stop-color="#151b23"/></linearGradient>
+<radialGradient id="luzAzul" cx="290" cy="840" r="680" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#3987e5" stop-opacity=".36"/><stop offset="1" stop-color="#3987e5" stop-opacity="0"/></radialGradient>
+<radialGradient id="luzVioleta" cx="820" cy="170" r="540" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9085e9" stop-opacity=".24"/><stop offset="1" stop-color="#9085e9" stop-opacity="0"/></radialGradient>
+<filter id="sombra" x="-40%" y="-40%" width="180%" height="195%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="20" result="b"/><feOffset in="b" dy="26" result="o"/><feComponentTransfer in="o" result="s"><feFuncA type="linear" slope=".62"/></feComponentTransfer><feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="48"/></filter>
+<linearGradient id="f" gradientUnits="userSpaceOnUse" x1="310" y1="235" x2="822" y2="789"><stop offset="0" stop-color="#62abff"/><stop offset=".55" stop-color="#9088f6"/><stop offset="1" stop-color="#7d6ff1"/></linearGradient>
+<linearGradient id="g" gradientUnits="userSpaceOnUse" x1="437" y1="468" x2="742" y2="593"><stop offset="0" stop-color="#3bdba6"/><stop offset="1" stop-color="#1fae74"/></linearGradient>
+<linearGradient id="brilloF" gradientUnits="userSpaceOnUse" x1="0" y1="235" x2="0" y2="567"><stop offset="0" stop-color="#fff" stop-opacity=".40"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<linearGradient id="bordeF" gradientUnits="userSpaceOnUse" x1="0" y1="235" x2="0" y2="512"><stop offset="0" stop-color="#fff" stop-opacity=".85"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<path id="F" d="M309.5,258.8 A24.0,24.0 0 0 1 333.5,234.8 L743.4,234.8 A24.0,24.0 0 0 1 764.8,269.7 L725.4,347.1 A24.0,24.0 0 0 1 704.0,360.2 L461.1,360.2 A24.0,24.0 0 0 0 437.1,384.2 L437.1,444.0 A24.0,24.0 0 0 0 461.1,468.0 L633.0,468.0 A24.0,24.0 0 0 1 654.8,502.0 L619.5,579.4 A24.0,24.0 0 0 1 597.7,593.4 L461.1,593.4 A24.0,24.0 0 0 0 437.1,617.4 L437.1,765.2 A24.0,24.0 0 0 1 413.1,789.2 L333.5,789.2 A24.0,24.0 0 0 1 309.5,765.2 Z"/>
+<clipPath id="recorte"><use href="#F"/></clipPath>
+</defs>
+<rect width="1024" height="1024" fill="url(#fondo)"/><rect width="1024" height="1024" fill="url(#luzAzul)"/><rect width="1024" height="1024" fill="url(#luzVioleta)"/>
+<use href="#F" fill="#6f8cff" filter="url(#glow)" opacity=".55"/>
+<g filter="url(#sombra)"><use href="#F" fill="url(#f)"/></g>
+<g clip-path="url(#recorte)">
+  <rect x="437" y="458" width="405" height="145" fill="url(#g)"/>
+  <rect width="1024" height="1024" fill="url(#brilloF)"/>
+  <use href="#F" fill="none" stroke="url(#bordeF)" stroke-width="7"/>
+</g>
+</svg>
