@@ -318,6 +318,14 @@ html.modal-abierto{overflow:hidden}
   /* 11 px con el tracking de escritorio (.16em) empujaba "Sincronizar" a una 2.ª línea: se afloja solo acá */
   .eyebrow{letter-spacing:.09em}
 }
+/* App instalada en un teléfono: el contenido pasa por debajo de la barra de estado (black-translucent).
+   Con env() solo no alcanzaba: si iOS lo informa en 0, o su desenfoque se extiende más allá de la zona
+   segura, el encabezado queda tapado y difuminado. Acá se garantiza un mínimo fijo (54 px, la barra de un
+   iPhone con isla dinámica) más 12 px de aire, y si env() llega con un valor mayor, se usa ese.
+   Va al final a propósito: tiene que ganarle a los .app de arriba, incluido el de pantallas angostas. */
+@media (display-mode:standalone) and (pointer:coarse){
+  .app{padding-top:calc(max(var(--sat),54px) + 12px)}
+}
 </style>
 </head>
 <body>
