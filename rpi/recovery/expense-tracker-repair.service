@@ -1,0 +1,18 @@
+# Lo dispara expense-tracker.service (OnFailure=) cuando entra en bucle de
+# reinicios: 5 arranques fallidos en 5 minutos. Reinstala node_modules con
+# npm ci y vuelve a levantar el servicio. Ver repair-node-modules.sh.
+[Unit]
+Description=Reparar node_modules de expense-tracker tras bucle de reinicios
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=APP_DIR=/home/rpi/expense-tracker/rpi
+ExecStart=/usr/local/sbin/expense-tracker-repair
+# better-sqlite3 puede compilar nativo: en la Zero 2W son varios minutos.
+TimeoutStartSec=60min
+# Sale con 1 si no hay red (no toca nada): reintentar cada 10 min hasta
+# que vuelva internet, que es cuando npm ci puede funcionar.
+Restart=on-failure
+RestartSec=10min

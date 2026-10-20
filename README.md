@@ -265,6 +265,37 @@ Configurar (una vez):
 El mismo chequeo se ve a mano en `GET /api/health` (200 si está sano, 503 con
 la lista de problemas si no).
 
+### Autorrecuperación tras un corte de luz
+
+El aviso dice *que* se cayó; esto intenta que se levante sola. Tres capas,
+en `rpi/recovery/`, instaladas con:
+
+```bash
+cd ~/expense-tracker/rpi/recovery && sudo bash install.sh && sudo reboot
+```
+
+| Falla | Qué la arregla | Cuándo actúa |
+|---|---|---|
+| Kernel o systemd colgados | Watchdog de hardware del chip (`RuntimeWatchdogSec=14`) | a los 14 s |
+| Perfil wifi borrado | `net-watchdog` lo restaura desde su copia en `/var/lib/net-watchdog/wifi` | en el primer chequeo sin red |
+| Wifi trabado | `net-watchdog`: reconectar → reiniciar NetworkManager → reboot | ~4 / ~8 / ~14 min sin red |
+| `node_modules` corrupto (bucle de reinicios) | `expense-tracker-repair`: `npm ci` y relanzar | tras 5 arranques fallidos en 5 min |
+
+Límites, a propósito:
+
+- "Sin red" es *ni el router responde*. Si el router responde y no hay
+  internet, es el proveedor: la Pi no hace nada.
+- Máximo 3 reboots cada 6 h, para que un router apagado no deje a la Pi en
+  bucle de reinicios.
+- `npm ci` no corre sin internet (borraría `node_modules` sin poder bajarlo de
+  nuevo) y como mucho una vez cada 6 h.
+- Ninguna capa arregla una SD muerta. Para eso, una SD "high endurance" y una
+  imagen de respaldo.
+
+Probar el watchdog de red sin cortar nada:
+`sudo NET_WATCHDOG_DRYRUN=1 /usr/local/sbin/net-watchdog` registra qué haría.
+Logs: `journalctl -u net-watchdog -u expense-tracker-repair`.
+
 ---
 
 ## Fase 4 — Preguntas en lenguaje natural
