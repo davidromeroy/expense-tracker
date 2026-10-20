@@ -303,7 +303,7 @@ cd ~/expense-tracker/rpi/recovery && sudo bash install.sh && sudo reboot
 
 | Falla | Qué la arregla | Cuándo actúa |
 |---|---|---|
-| Kernel o systemd colgados | Watchdog de hardware del chip (`RuntimeWatchdogSec=14`) | a los 14 s |
+| Kernel o systemd colgados | Watchdog de hardware del chip, que **ya activa Raspberry Pi OS** (`RuntimeWatchdogSec=1m`); acá no se instala nada | al minuto |
 | Perfil wifi borrado | `net-watchdog` lo restaura desde su copia en `/var/lib/net-watchdog/wifi` | en el primer chequeo sin red |
 | Wifi trabado | `net-watchdog`: reconectar → reiniciar NetworkManager → reboot | ~4 / ~8 / ~14 min sin red |
 | `node_modules` corrupto (bucle de reinicios) | `expense-tracker-repair`: `npm ci` y relanzar | tras 5 arranques fallidos en 5 min |

@@ -5,7 +5,8 @@
 #   cd ~/expense-tracker/rpi/recovery && sudo bash install.sh
 #
 # Qué instala:
-#   - Watchdog de hardware: el chip reinicia la Pi si el kernel se cuelga.
+#   - (El watchdog de hardware NO se instala acá: Raspberry Pi OS ya lo activa con
+#     /usr/lib/systemd/system.conf.d/40-rpi-enable-watchdog.conf, a 1 minuto.)
 #   - net-watchdog (timer cada 2 min): respalda el perfil wifi, lo restaura
 #     si desaparece, y escala reconectar → reiniciar NetworkManager → reboot.
 #   - expense-tracker-repair: npm ci automático si el servicio entra en bucle
@@ -36,18 +37,10 @@ install -m 644 "$DIR/net-watchdog.timer" /etc/systemd/system/
 install -m 644 "$DIR/expense-tracker-repair.service" /etc/systemd/system/
 install -m 644 "$RPI_DIR/expense-tracker.service" /etc/systemd/system/
 
-echo "== Watchdog de hardware"
-install -d /etc/systemd/system.conf.d
-install -m 644 "$DIR/watchdog.conf" /etc/systemd/system.conf.d/10-watchdog.conf
-CONFIG=/boot/firmware/config.txt
-[ -f "$CONFIG" ] || CONFIG=/boot/config.txt
-if grep -q '^dtparam=watchdog=on' "$CONFIG"; then
-  echo "   dtparam=watchdog=on ya estaba en $CONFIG"
-else
-  cp -p "$CONFIG" "$CONFIG.bak-$(date +%Y%m%d)"
-  printf '\n# Watchdog de hardware (expense-tracker/rpi/recovery)\ndtparam=watchdog=on\n' >> "$CONFIG"
-  echo "   agregado dtparam=watchdog=on a $CONFIG (copia en $CONFIG.bak-*)"
-fi
+echo "== Limpieza de la versión anterior del watchdog de hardware"
+# Una versión previa de este instalador copiaba 10-watchdog.conf. Nunca tuvo
+# efecto: el sistema trae 40-rpi-enable-watchdog.conf, que ordena después y gana.
+rm -f /etc/systemd/system.conf.d/10-watchdog.conf
 
 echo "== Wifi sin ahorro de energía"
 install -m 644 "$DIR/wifi-powersave-off.conf" /etc/NetworkManager/conf.d/
@@ -58,17 +51,15 @@ ls -1 /var/lib/net-watchdog/wifi/ | sed 's/^/   /'
 
 echo "== Activando"
 systemctl daemon-reload
-# Aplica 10-watchdog.conf sin reiniciar (re-ejecuta systemd, no corta SSH).
-systemctl daemon-reexec
 systemctl enable --now net-watchdog.timer
 # El servicio solo se reinicia para que tome StartLimit/OnFailure nuevos.
 systemctl restart expense-tracker
 
 echo
 echo "Listo. Verificar:"
-echo "  systemctl show -p RuntimeWatchdogUSec          # debería decir 14s"
+echo "  systemctl show -p RuntimeWatchdogUSec          # 1min: lo fija Raspberry Pi OS"
 echo "  systemctl list-timers net-watchdog.timer"
 echo "  journalctl -u net-watchdog -n 20"
 echo
-echo "Falta un reboot para que tomen dtparam=watchdog=on y el wifi sin ahorro:"
+echo "Falta un reboot para que tome el wifi sin ahorro de energía:"
 echo "  sudo reboot"
