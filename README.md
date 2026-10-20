@@ -236,6 +236,35 @@ Instala [Tailscale](https://tailscale.com) en la Pi y en tu celular (gratis
 para uso personal). Te da una IP privada que funciona desde cualquier red sin
 tocar el router ni exponer la Pi a internet público.
 
+### Aviso al celular si la Pi se cae
+
+La Pi no puede avisar que se cayó: sin luz o sin red no manda nada. Por eso
+el aviso es un *dead man's switch* externo con
+[healthchecks.io](https://healthchecks.io) (plan gratis): `server.js` le manda
+un latido cada 5 minutos, y si deja de llegar, healthchecks.io avisa.
+
+| Qué pasa | Qué recibe healthchecks.io | Aviso |
+|---|---|---|
+| Pi apagada, sin wifi, sin internet | nada | al vencer el plazo + gracia |
+| `server.js` en bucle de reinicios | nada | al vencer el plazo + gracia |
+| Proceso vivo, sync sin éxito hace > 50 min | latido a `/fail` con el motivo | inmediato |
+| Disco ≥ 90 %, SQLite que no responde | latido a `/fail` con el motivo | inmediato |
+| Todo bien | latido normal | — |
+
+Configurar (una vez):
+
+1. Crear cuenta en healthchecks.io → **Add Check** → Period `5 minutes`,
+   Grace `10 minutes`.
+2. **Integrations** → conectar el canal de aviso (Telegram, ntfy, email…).
+3. Copiar la *Ping URL* (`https://hc-ping.com/<uuid>`) a `HC_PING_URL` en el
+   `.env` de la Pi y reiniciar el servicio. Es un secreto: con ella cualquiera
+   puede marcar el check como sano.
+4. Probar: `sudo systemctl stop expense-tracker`, esperar ~15 min, debería
+   llegar el aviso. `sudo systemctl start expense-tracker` lo cierra.
+
+El mismo chequeo se ve a mano en `GET /api/health` (200 si está sano, 503 con
+la lista de problemas si no).
+
 ---
 
 ## Fase 4 — Preguntas en lenguaje natural
