@@ -18,6 +18,7 @@ const alexaVerifier = require('alexa-verifier').default;
 const { db, getMeta } = require('./db');
 const { syncOnce } = require('./sync');
 const { askQuestion } = require('./chatbot');
+const { calcularSemanas, fechaLocal } = require('./semana');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -459,6 +460,8 @@ app.get('/api/dashboard', (_req, res) => {
     porCategoria,
     porMetodo,
     metodosMes,
+    // Vista Semana. `fechaLocal()` y no el `hoy` UTC de arriba: ver semana.js.
+    semanas: calcularSemanas(gastos, fechaLocal()),
     invMes,
     topGastos: [...gastos]
       .sort((a, b) => b.monto - a.monto)
@@ -732,10 +735,10 @@ app.get('/api/health', (_req, res) => {
 
 // https.request en vez de fetch(): fetch global recién es estable en Node 18
 // y este latido no puede depender de la versión de Node instalada en la Pi.
-function enviarLatido(url, cuerpo) {
+function enviarLatido(url, cuerpo, headers) {
   return new Promise((resolve, reject) => {
     const cliente = url.startsWith('http:') ? http : https;
-    const req = cliente.request(url, { method: 'POST', timeout: 10000 }, (res) => {
+    const req = cliente.request(url, { method: 'POST', timeout: 10000, headers }, (res) => {
       res.resume();
       res.on('end', () => resolve(res.statusCode));
     });
@@ -768,6 +771,53 @@ if (HC_PING_URL) {
 } else {
   console.warn('[health] HC_PING_URL vacío — sin aviso externo de caídas');
 }
+
+// --- Aviso semanal por ntfy ---
+//
+// El push es genérico a propósito: ntfy.sh es un servidor público y sin cifrar,
+// y lo único que protege un tema es que nadie conozca su nombre. Las cifras
+// quedan dentro de la Pi y se ven al tocar el aviso (el dashboard, por
+// Tailscale). Tema propio, distinto del de las alertas de caída: un resumen
+// no debe mezclarse con una alarma.
+const NTFY_SERVER = (process.env.NTFY_SERVER || 'https://ntfy.sh').trim().replace(/\/+$/, '');
+const RESUMEN_TOPIC = (process.env.RESUMEN_NTFY_TOPIC || '').trim();
+const RESUMEN_URL = (process.env.RESUMEN_URL || '').trim();
+// Domingo 20:00 hora de Ecuador. Con `timezone`, no depende del huso de la Pi.
+const RESUMEN_CRON = (process.env.RESUMEN_CRON || '0 20 * * 0').trim();
+
+async function enviarResumenSemanal() {
+  if (!RESUMEN_TOPIC) throw new Error('RESUMEN_NTFY_TOPIC vacío');
+  // Publicación en JSON a la raíz del servidor: admite tildes y emojis en el
+  // título, cosa que los encabezados HTTP de la otra forma de publicar no.
+  const aviso = {
+    topic: RESUMEN_TOPIC,
+    title: 'Tu resumen semanal está listo',
+    message: 'Tocá para ver cómo te fue esta semana.',
+    tags: ['bar_chart'],
+    priority: 3,
+  };
+  if (RESUMEN_URL) aviso.click = RESUMEN_URL;
+  const codigo = await enviarLatido(NTFY_SERVER, JSON.stringify(aviso), { 'Content-Type': 'application/json' });
+  if (codigo !== 200) throw new Error(`ntfy respondió ${codigo}`);
+}
+
+if (RESUMEN_TOPIC) {
+  cron.schedule(RESUMEN_CRON, () => {
+    enviarResumenSemanal().catch((err) => console.error('[resumen] no se pudo enviar el aviso:', err.message));
+  }, { timezone: 'America/Guayaquil' });
+} else {
+  console.warn('[resumen] RESUMEN_NTFY_TOPIC vacío — sin aviso semanal');
+}
+
+// Para probar sin esperar al domingo: POST /api/resumen/enviar
+app.post('/api/resumen/enviar', async (_req, res) => {
+  try {
+    await enviarResumenSemanal();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Dashboard corriendo en http://0.0.0.0:${PORT}`);

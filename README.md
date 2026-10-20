@@ -27,7 +27,7 @@ gráfico nativo de Google como respaldo. Cuando la Pi vuelve, se pone al día so
 
 ## El dashboard
 
-Ocho vistas, una a la vez, con navegación por chips: no hay que scrollear para
+Diez vistas, una a la vez, con navegación por chips: no hay que scrollear para
 encontrar nada. Todos los gráficos son **SVG generado desde los datos** — el
 dashboard no carga ninguna librería de charts ni depende de un CDN, así que
 abre igual sin internet mientras la Pi esté encendida.
@@ -235,6 +235,33 @@ Angular/frameworks pesados directamente en la Pi.
 Instala [Tailscale](https://tailscale.com) en la Pi y en tu celular (gratis
 para uso personal). Te da una IP privada que funciona desde cualquier red sin
 tocar el router ni exponer la Pi a internet público.
+
+### Resumen semanal
+
+La vista **Semana** (`dashboard.html#semana`) reemplazó a Evolución. Muestra
+lo gastado de lunes a domingo, la comparación con la semana anterior, el gasto
+por día, la categoría más cara, el gasto individual más grande y cuántos
+gastos registraste. La semana en curso se compara con la anterior *hasta el
+mismo día*, no con la anterior entera.
+
+**No muestra ingresos ni neto, a propósito:** el sueldo es quincenal, así que
+una de cada dos semanas daría un neto negativo sin significar nada.
+
+Los domingos a las 20:00 (hora de Ecuador) la Pi manda un push por ntfy:
+*"Tu resumen semanal está listo"*, que abre la vista Semana al tocarlo. El push
+es genérico, **sin montos**: ntfy.sh es público y sin cifrar, y lo único que
+protege un tema es que nadie conozca su nombre. Las cifras solo se ven en el
+dashboard, por Tailscale.
+
+Configurar en el `.env` de la Pi (ver `.env.example`):
+
+- `RESUMEN_NTFY_TOPIC`: un tema **nuevo**, largo y al azar, distinto del de las
+  alertas de caída. Vacío = sin aviso.
+- `RESUMEN_URL`: lo que abre al tocar el aviso, por ejemplo
+  `http://<IP-tailscale>:3000/dashboard.html#semana`.
+
+Para probarlo sin esperar al domingo: `curl -X POST localhost:3000/api/resumen/enviar`.
+El cálculo de semanas está en `rpi/semana.js` y se prueba con `npm test`.
 
 ### Aviso al celular si la Pi se cae
 
