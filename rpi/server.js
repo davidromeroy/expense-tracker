@@ -291,7 +291,9 @@ app.get('/api/dashboard', (_req, res) => {
       .filter((r) => !fechaInicioTracking || r.fecha >= fechaInicioTracking)
       .map((r) => r.fecha.slice(0, 7))
   )].sort();
-  const hoy = new Date().toISOString().slice(0, 10);
+  // Fecha LOCAL: la UTC adelanta el día desde las 19:00 de Ecuador, y el último
+  // día del mes el dashboard ya trataba el mes siguiente como "en curso".
+  const hoy = fechaLocal();
   const mesEnCurso = hoy.slice(0, 7);
 
   const porMes = meses.map((mes) => {
@@ -460,8 +462,7 @@ app.get('/api/dashboard', (_req, res) => {
     porCategoria,
     porMetodo,
     metodosMes,
-    // Vista Semana. `fechaLocal()` y no el `hoy` UTC de arriba: ver semana.js.
-    semanas: calcularSemanas(gastos, fechaLocal()),
+    semanas: calcularSemanas(gastos, hoy),
     invMes,
     topGastos: [...gastos]
       .sort((a, b) => b.monto - a.monto)
