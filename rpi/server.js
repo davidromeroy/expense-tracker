@@ -5,6 +5,9 @@
 // para el tráfico de un dashboard personal.
 
 require('dotenv').config();
+const fs = require('fs');
+const http = require('http');
+const https = require('https');
 const path = require('path');
 const express = require('express');
 const cron = require('node-cron');
@@ -653,6 +656,112 @@ app.post('/api/sync', async (_req, res) => {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
+
+// --- Salud del servicio + latido a healthchecks.io ---
+//
+// La Pi no puede avisar que se cayó: si no tiene luz o red, no manda nada.
+// Por eso el aviso es un "dead man's switch" externo (healthchecks.io): el
+// proceso le manda un latido cada HC_INTERVAL_MIN y, si deja de llegar, el
+// servicio externo avisa al celular. Cubre los tres modos de caída reales:
+// Pi apagada / sin red (no llega latido), server.js en bucle de reinicios
+// (no llega latido), y proceso vivo pero sync roto o disco lleno (llega
+// latido a /fail con el motivo). En el corte de luz del 2026-10-07 la Pi
+// estuvo 7 días caída sin que nada avisara.
+const HC_PING_URL = process.env.HC_PING_URL;
+const HC_INTERVAL_MIN = Number(process.env.HC_INTERVAL_MIN || 5);
+// Tolera un sync fallido suelto (Google a veces devuelve 5xx): solo es
+// problema si pasaron ~3 intervalos sin ninguno bueno.
+const SYNC_STALE_MIN = Number(process.env.SYNC_STALE_MIN || SYNC_INTERVAL_MIN * 3 + 5);
+const DISCO_MAX_PCT = Number(process.env.DISCO_MAX_PCT || 90);
+const arrancoEn = Date.now();
+
+function estadoSalud() {
+  const problemas = [];
+
+  try {
+    db.prepare('SELECT 1').get();
+  } catch (err) {
+    problemas.push(`base SQLite no responde: ${err.message}`);
+  }
+
+  const ultimoOk = getMeta('lastSyncAt');
+  const minutosDesdeSync = ultimoOk
+    ? Math.round((Date.now() - Date.parse(ultimoOk)) / 60000)
+    : null;
+  // Recién arrancado, el sync inicial puede no haber terminado todavía: no
+  // marcar "nunca sincronizó" hasta darle un intervalo de margen.
+  const enGracia = Date.now() - arrancoEn < SYNC_INTERVAL_MIN * 60000;
+  if (minutosDesdeSync === null) {
+    if (!enGracia) problemas.push('nunca sincronizó con el Sheet');
+  } else if (minutosDesdeSync > SYNC_STALE_MIN) {
+    const error = getMeta('lastSyncError');
+    problemas.push(
+      `sin sync bueno hace ${minutosDesdeSync} min` + (error ? ` (último error: ${error})` : '')
+    );
+  }
+
+  // fs.statfsSync existe desde Node 18.15; en uno más viejo se omite el chequeo.
+  let discoUsadoPct = null;
+  if (typeof fs.statfsSync === 'function') {
+    try {
+      const s = fs.statfsSync(__dirname);
+      discoUsadoPct = Math.round((1 - s.bavail / s.blocks) * 100);
+      if (discoUsadoPct >= DISCO_MAX_PCT) problemas.push(`disco al ${discoUsadoPct}%`);
+    } catch (err) {
+      problemas.push(`no se pudo leer el disco: ${err.message}`);
+    }
+  }
+
+  return {
+    ok: problemas.length === 0,
+    problemas,
+    ultimoSyncOk: ultimoOk || null,
+    minutosDesdeSync,
+    discoUsadoPct,
+    memoriaMB: Math.round(process.memoryUsage().rss / 1048576),
+    uptimeMin: Math.round(process.uptime() / 60),
+  };
+}
+
+app.get('/api/health', (_req, res) => {
+  const estado = estadoSalud();
+  res.status(estado.ok ? 200 : 503).json(estado);
+});
+
+// https.request en vez de fetch(): fetch global recién es estable en Node 18
+// y este latido no puede depender de la versión de Node instalada en la Pi.
+function enviarLatido(url, cuerpo) {
+  return new Promise((resolve, reject) => {
+    const cliente = url.startsWith('http:') ? http : https;
+    const req = cliente.request(url, { method: 'POST', timeout: 10000 }, (res) => {
+      res.resume();
+      res.on('end', () => resolve(res.statusCode));
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', reject);
+    req.end(cuerpo);
+  });
+}
+
+async function reportarSalud() {
+  const estado = estadoSalud();
+  const url = estado.ok ? HC_PING_URL : `${HC_PING_URL}/fail`;
+  if (!estado.ok) console.warn('[health] problemas:', estado.problemas.join(' | '));
+  try {
+    // El cuerpo aparece en el panel de healthchecks.io y en el aviso: así el
+    // mensaje dice POR QUÉ falló, no solo que falló.
+    await enviarLatido(url, JSON.stringify(estado, null, 2));
+  } catch (err) {
+    // Sin red no hay nada que hacer acá: la ausencia de latido ES la alarma.
+    console.error('[health] no se pudo enviar el latido:', err.message);
+  }
+}
+
+if (HC_PING_URL) {
+  cron.schedule(`*/${HC_INTERVAL_MIN} * * * *`, reportarSalud);
+} else {
+  console.warn('[health] HC_PING_URL vacío — sin aviso externo de caídas');
+}
 
 app.listen(PORT, () => {
   console.log(`Dashboard corriendo en http://0.0.0.0:${PORT}`);
