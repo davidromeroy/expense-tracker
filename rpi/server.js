@@ -667,7 +667,9 @@ app.post('/api/sync', async (_req, res) => {
 // (no llega latido), y proceso vivo pero sync roto o disco lleno (llega
 // latido a /fail con el motivo). En el corte de luz del 2026-10-07 la Pi
 // estuvo 7 días caída sin que nada avisara.
-const HC_PING_URL = process.env.HC_PING_URL;
+// .trim(): al pegar la URL desde el celular se coló un espacio al final. Node
+// lo tolera, pero curl la rechaza, y un espacio en el medio rompería el latido.
+const HC_PING_URL = (process.env.HC_PING_URL || '').trim();
 const HC_INTERVAL_MIN = Number(process.env.HC_INTERVAL_MIN || 5);
 // Tolera un sync fallido suelto (Google a veces devuelve 5xx): solo es
 // problema si pasaron ~3 intervalos sin ninguno bueno.
@@ -750,7 +752,11 @@ async function reportarSalud() {
   try {
     // El cuerpo aparece en el panel de healthchecks.io y en el aviso: así el
     // mensaje dice POR QUÉ falló, no solo que falló.
-    await enviarLatido(url, JSON.stringify(estado, null, 2));
+    const codigo = await enviarLatido(url, JSON.stringify(estado, null, 2));
+    // healthchecks.io responde 200 si lo aceptó. Un 404 es una URL mal escrita
+    // o un check borrado: sin esta línea el latido "salía" y nadie se enteraba
+    // de que no estaba llegando a ningún lado.
+    if (codigo !== 200) console.error(`[health] healthchecks.io respondió ${codigo}, el latido no se registró`);
   } catch (err) {
     // Sin red no hay nada que hacer acá: la ausencia de latido ES la alarma.
     console.error('[health] no se pudo enviar el latido:', err.message);
