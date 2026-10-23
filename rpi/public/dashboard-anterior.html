@@ -612,7 +612,7 @@ html.modal-abierto{overflow:hidden}
       return '<section class="panel">' +
         '<div class="phead"><h2>En qué se va el gasto</h2><span class="tag">' + esc(ambito) + '</span></div>' +
         barra +
-        '<div class="read"><b>Sin gastos en ' + esc(ambito) + '.</b> Elegí otro período para ver el desglose.</div></section>';
+        '<div class="read"><b>Sin gastos en ' + esc(ambito) + '.</b> Elige otro período para ver el desglose.</div></section>';
     }
 
     // Base del porcentaje. Sobre los gastos suma 100%. Sobre los ingresos responde
@@ -1001,7 +1001,7 @@ html.modal-abierto{overflow:hidden}
           '<span class="pct">' + pct(x.v / total * 100) + '</span></div>';
       }).join('');
       return '<section class="panel">' +
-        '<div class="phead"><h2>Cuánto tenés, y dónde está</h2><span class="tag">' + money0(g.patrimonioTotalMov) + '</span></div>' +
+        '<div class="phead"><h2>Cuánto tienes, y dónde está</h2><span class="tag">' + money0(g.patrimonioTotalMov) + '</span></div>' +
         '<div class="catlist" style="padding:16px 20px 0">' + filas + '</div>' +
         '<div class="read"><b>Esto es un cálculo, no tu saldo real de cuenta.</b> Invertido y Fondo de emergencia suman lo que ' +
         'registraste como movimiento (más la semilla que cargaste a mano) — si tu inversión ganó rentabilidad, o algún gasto no se ' +
@@ -1016,7 +1016,7 @@ html.modal-abierto{overflow:hidden}
       { lab: 'tenías', sub: p.fechaApertura, v: p.inicial, y: yb - p.inicial * esc0, h: p.inicial * esc0, c: '--mute', txt: money0(p.inicial) },
       { lab: 'ingresos', sub: 'entró', v: ing, y: top, h: ing * esc0, c: '--pos', txt: '+' + money0(ing) },
       { lab: 'gastos', sub: 'salió', v: gas, y: top, h: gas * esc0, c: '--neg', txt: '−' + money0(gas) },
-      { lab: 'tenés hoy', sub: 'patrimonio', v: p.total, y: yb - p.total * esc0, h: p.total * esc0, c: '--ink-3', txt: money0(p.total) }
+      { lab: 'tienes hoy', sub: 'patrimonio', v: p.total, y: yb - p.total * esc0, h: p.total * esc0, c: '--ink-3', txt: money0(p.total) }
     ];
     var slot = 660 / 4, bw = Math.min(88, slot - 20);
     var cascada = barras.map(function (b, i) {
@@ -1048,7 +1048,7 @@ html.modal-abierto{overflow:hidden}
     var meses = D.general.gas / D.porMes.filter(function (m) { return !m.enCurso; }).length;
 
     return '<section class="panel">' +
-      '<div class="phead"><h2>Cuánto tenés, y dónde está</h2><span class="tag">' + money0(p.total) + '</span></div>' +
+      '<div class="phead"><h2>Cuánto tienes, y dónde está</h2><span class="tag">' + money0(p.total) + '</span></div>' +
       '<div class="plot wide">' + svg('0 0 760 ' + (yb + 44),
         '<line class="grid" x1="80" y1="' + yb + '" x2="740" y2="' + yb + '"/>' +
         '<text class="ax" x="72" y="' + (yb + 4) + '" text-anchor="end">$0</text>' + cascada,
@@ -1060,7 +1060,7 @@ html.modal-abierto{overflow:hidden}
       'invertir no es gastar, es la misma plata cambiando de forma. Por eso ' + money(p.total) + ' no es lo mismo que ' +
       'ingresos − gastos (' + money(ing - gas) + '), que es solo lo que <em>creciste</em> en estos meses.<br><br>' +
       '<b>La liquidez es el número flojo:</b> sale de restar, así que arrastra cualquier gasto sin registrar. ' +
-      'Cargá el saldo real de tu cuenta en la hoja <code>Saldos</code>: si no da ' + money(p.liquidez) +
+      'Carga el saldo real de tu cuenta en la hoja <code>Saldos</code>: si no da ' + money(p.liquidez) +
       ', esa diferencia es exactamente lo que te falta anotar. Tu liquidez cubre ' + nf1.format(p.liquidez / meses) +
       ' meses de gasto al ritmo actual.</div></section>';
   }
@@ -1212,7 +1212,7 @@ html.modal-abierto{overflow:hidden}
           '<th>Método</th><th>Nota</th>' + thOrd('monto', 'Monto') + '</tr></thead>' +
         '<tbody id="detBody"><tr><td colspan="5" class="detmsg">Cargando…</td></tr></tbody>' +
       '</table></div>' +
-      '<div class="read">Tocá el encabezado de <b>Fecha</b> o <b>Monto</b> para ordenar. El filtro de mes, tipo, categoría y ' +
+      '<div class="read">Toca el encabezado de <b>Fecha</b> o <b>Monto</b> para ordenar. El filtro de mes, tipo, categoría y ' +
         'método se cruzan entre sí — todo lo de Alimentos en julio, por ejemplo.</div></section>';
   }
 
@@ -1294,7 +1294,7 @@ html.modal-abierto{overflow:hidden}
     }).join('');
 
     return '<section class="panel">' +
-      '<div class="phead"><h2>Preguntale a tus datos</h2><span class="tag">beta · Gemini</span></div>' +
+      '<div class="phead"><h2>Pregúntale a tus datos</h2><span class="tag">beta · Gemini</span></div>' +
       '<div class="ask">' +
         '<textarea id="askInput" rows="2" placeholder="¿Cuánto gasté en Alimentos en julio?"></textarea>' +
         '<button type="button" id="askBtn">Preguntar</button>' +
@@ -1392,14 +1392,14 @@ html.modal-abierto{overflow:hidden}
     // Colores distintos (s3 morado / s4 ámbar) a propósito — con el mismo
     // color no se notaba que habían cambiado de contenido al tocar.
     cards.push(verFondo
-      ? { c: 'fon', t: 'Fondo de emergencia', v: g.fondoEmergenciaTotal, s: 'acumulado · tocá para ver invertido', tgl: 'fondo' }
-      : { c: 'inv', t: 'Invertido', v: D.invMes.length ? D.invMes[D.invMes.length - 1].acumulado : 0, s: 'acumulado · tocá para ver fondo', tgl: 'fondo' });
+      ? { c: 'fon', t: 'Fondo de emergencia', v: g.fondoEmergenciaTotal, s: 'acumulado · toca para ver invertido', tgl: 'fondo' }
+      : { c: 'inv', t: 'Invertido', v: D.invMes.length ? D.invMes[D.invMes.length - 1].acumulado : 0, s: 'acumulado · toca para ver fondo', tgl: 'fondo' });
 
     if (p.disponible) {
       p.cuentas.forEach(function (c) {
         if (!/invers/i.test(c.cuenta)) cards.push({ c: 'sal', t: c.cuenta, v: c.saldo, s: 'saldo al ' + c.fecha });
       });
-      cards.push({ c: 'pat', t: 'Patrimonio hoy', v: p.total, s: 'todo lo que tenés' });
+      cards.push({ c: 'pat', t: 'Patrimonio hoy', v: p.total, s: 'todo lo que tienes' });
     } else {
       // Patrimonio <-> Liquidez comparten tarjeta. Patrimonio (antes decía
       // "Neto") es semilla de enero + todo lo que entró y salió — tu
@@ -1410,8 +1410,8 @@ html.modal-abierto{overflow:hidden}
       // esa cuenta sigue viva en la pestaña "Neto mensual", que sí necesita
       // el flujo puro por mes; acá no.
       cards.push(verLiquidez
-        ? { c: 'liq', t: 'Liquidez', v: g.liquidez, s: 'patrimonio − invertido − fondo · tocá para ver patrimonio', tgl: 'liquidez' }
-        : { c: '', t: 'Patrimonio', v: g.patrimonioTotalMov, s: 'semilla + ingresos − gastos · tocá para ver liquidez', tgl: 'liquidez' });
+        ? { c: 'liq', t: 'Liquidez', v: g.liquidez, s: 'patrimonio − invertido − fondo · toca para ver patrimonio', tgl: 'liquidez' }
+        : { c: '', t: 'Patrimonio', v: g.patrimonioTotalMov, s: 'semilla + ingresos − gastos · toca para ver liquidez', tgl: 'liquidez' });
     }
     document.getElementById('ledger').innerHTML = cards.map(function (k) {
       var partes = nf.format(Math.abs(k.v)).split(',');
@@ -1623,8 +1623,8 @@ html.modal-abierto{overflow:hidden}
         D = json;
         if (!D.porMes.length) {
           errorPanel('La base está vacía',
-            'La Pi se conectó bien pero no hay movimientos guardados. Corré <code>npm run sync-once</code> ' +
-            'para traer el Google Sheet, o tocá <b>Sincronizar</b> arriba.');
+            'La Pi se conectó bien pero no hay movimientos guardados. Corre <code>npm run sync-once</code> ' +
+            'para traer el Google Sheet, o toca <b>Sincronizar</b> arriba.');
           return;
         }
         pintarCabecera(); pintarChips(); pintarPanel();
@@ -1635,7 +1635,7 @@ html.modal-abierto{overflow:hidden}
           return;
         }
         errorPanel('No pude leer los datos',
-          esc(err.message) + '. Si estás fuera de casa, revisá que Tailscale esté conectado; ' +
+          esc(err.message) + '. Si estás fuera de casa, revisa que Tailscale esté conectado; ' +
           'si estás en casa, que el servicio siga vivo: <code>systemctl status expense-tracker</code>.');
       });
   }

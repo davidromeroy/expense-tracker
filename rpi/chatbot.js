@@ -126,7 +126,7 @@ async function askQuestion(pregunta) {
     if (CUOTA_AGOTADA.test(err.message || '')) {
       return {
         respuesta: 'Se acabó la cuota gratis de Gemini por hoy (20 consultas/día, se resetea a las 24hs). ' +
-          'Probá de nuevo mañana, o mientras tanto usá los filtros de la pestaña Detalle.',
+          'Prueba de nuevo mañana o, mientras tanto, usa los filtros de la pestaña Detalle.',
         filas: [],
       };
     }
@@ -146,10 +146,10 @@ async function askQuestionInner(pregunta) {
     config: {
       systemInstruction: `Hoy es ${today}. Traduce preguntas sobre finanzas personales (gastos, ingresos, inversiones, ahorro) a SQL contra este esquema:\n${SCHEMA_DESC}\n` +
         `Las ÚNICAS categorías que existen en los datos son: ${categoriasReales().join(', ')}.\n` +
-        `Usá exactamente esos nombres. Si el usuario usa un sinónimo, traducilo a la categoría real ` +
+        `Usa exactamente esos nombres. Si el usuario usa un sinónimo, tradúcelo a la categoría real ` +
         `(por ejemplo "comida" o "supermercado" se refieren a la categoría de alimentación de la lista). ` +
-        `Si ninguna categoría de la lista corresponde a lo que preguntan, no inventes una: hacé la consulta ` +
-        `sin filtrar por categoría y aclaralo en la respuesta final.\n` +
+        `Si ninguna categoría de la lista corresponde a lo que preguntan, no inventes una: haz la consulta ` +
+        `sin filtrar por categoría y acláralo en la respuesta final.\n` +
         `Usa siempre la función run_query. Si la pregunta es ambigua, elige la interpretación más razonable y dilo en tu respuesta final.`,
       tools: [{ functionDeclarations: [runQueryFunction()] }],
     },
@@ -184,7 +184,9 @@ async function askQuestionInner(pregunta) {
     // `ai` ya está resuelto (misma instancia obtenida arriba con getAi()),
     // no hace falta un segundo await a getAi() acá.
     config: {
-      systemInstruction: 'Redacta una respuesta breve en español, en moneda local, a partir de este resultado SQL. No repitas el SQL.',
+      // Español de Ecuador: tratar de tú. Sin esta instrucción el modelo a veces
+      // contestaba con voseo ("gastaste… mirá"), que no es como habla el usuario.
+      systemInstruction: 'Redacta una respuesta breve en español de Ecuador, tratando al usuario de tú (nunca uses voseo: nada de "tenés", "mirá" ni "vos"), en dólares, a partir de este resultado SQL. No repitas el SQL.',
     },
   });
 
