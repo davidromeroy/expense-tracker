@@ -280,7 +280,7 @@ svg.ch .ln{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round
     <div><h1>Finanzas</h1><small id="rango">—</small></div>
     <button class="sync" id="sync" type="button" aria-label="Sincronizar con el Google Sheet"><i></i><span id="syncTxt">—</span></button>
   </header>
-  <div class="ptr" id="ptr" aria-hidden="true"><span><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg><b id="ptrTxt">Deslizá para sincronizar</b></span></div>
+  <div class="ptr" id="ptr" aria-hidden="true"><span><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg><b id="ptrTxt">Desliza para sincronizar</b></span></div>
   <main class="screen" id="screen"></main>
   <nav class="tabbar" id="tabbar" role="tablist" aria-label="Secciones"></nav>
   <div class="toast" id="toast" role="status"></div>
@@ -372,19 +372,19 @@ svg.ch .ln{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round
     var g = D.general, p = D.patrimonio || {};
     var cards = [{ c: 'in', t: 'Ingresos', v: g.ing, s: meses().length + ' meses' }, { c: 'out', t: 'Gastos', v: g.gas, s: g.n + ' movimientos' }];
     cards.push(st.verFondo
-      ? { c: 'fon', t: 'Fondo de emergencia', v: g.fondoEmergenciaTotal, s: 'acumulado · tocá para ver invertido', tgl: 'fondo' }
-      : { c: 'inv', t: 'Invertido', v: D.invMes.length ? D.invMes[D.invMes.length - 1].acumulado : 0, s: 'acumulado · tocá para ver fondo', tgl: 'fondo' });
+      ? { c: 'fon', t: 'Fondo de emergencia', v: g.fondoEmergenciaTotal, s: 'acumulado · toca para ver invertido', tgl: 'fondo' }
+      : { c: 'inv', t: 'Invertido', v: D.invMes.length ? D.invMes[D.invMes.length - 1].acumulado : 0, s: 'acumulado · toca para ver fondo', tgl: 'fondo' });
     if (p.disponible) {
       p.cuentas.forEach(function (c) { if (!/invers/i.test(c.cuenta)) cards.push({ c: 'sal', t: c.cuenta, v: c.saldo, s: 'saldo al ' + c.fecha }); });
-      cards.push({ c: 'pat', t: 'Patrimonio hoy', v: p.total, s: 'todo lo que tenés' });
+      cards.push({ c: 'pat', t: 'Patrimonio hoy', v: p.total, s: 'todo lo que tienes' });
     } else {
       cards.push(st.verLiquidez
-        ? { c: 'liq', t: 'Liquidez', v: g.liquidez, s: 'patrimonio − invertido − fondo · tocá para ver patrimonio', tgl: 'liquidez' }
-        : { c: '', t: 'Patrimonio', v: g.patrimonioTotalMov, s: 'semilla + ingresos − gastos · tocá para ver liquidez', tgl: 'liquidez' });
+        ? { c: 'liq', t: 'Liquidez', v: g.liquidez, s: 'patrimonio − invertido − fondo · toca para ver patrimonio', tgl: 'liquidez' }
+        : { c: '', t: 'Patrimonio', v: g.patrimonioTotalMov, s: 'semilla + ingresos − gastos · toca para ver liquidez', tgl: 'liquidez' });
     }
     return '<dl class="ledger" id="ledger">' + cards.map(function (k) {
       var pt = nf.format(Math.abs(k.v)).split(',');
-      return '<div class="led ' + k.c + (k.tgl ? ' tgl' : '') + '"' + (k.tgl ? ' data-tgl="' + k.tgl + '" tabindex="0" role="button" aria-label="' + esc(k.t) + ', tocá para alternar"' : '') +
+      return '<div class="led ' + k.c + (k.tgl ? ' tgl' : '') + '"' + (k.tgl ? ' data-tgl="' + k.tgl + '" tabindex="0" role="button" aria-label="' + esc(k.t) + ', toca para alternar"' : '') +
         '><dt>' + esc(k.t) + (k.tgl ? '<i class="swap" aria-hidden="true">⇄</i>' : '') + '</dt><dd>' + (k.v < 0 ? '−' : '') + '$' + pt[0] + '<span>,' + pt[1] + '</span></dd><p>' + esc(k.s) + '</p></div>';
     }).join('') + '</dl>';
   }
@@ -573,7 +573,7 @@ svg.ch .ln{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round
   function detRes() {
     var rows = filtrados(), tot = rows.reduce(function (a, r) { return a + r.monto; }, 0);
     return '<div class="tot"><span>' + rows.length + (rows.length === 1 ? ' movimiento' : ' movimientos') + '</span><b>' + money(tot) + '</b></div>' +
-      (rows.length ? agrupar(rows.slice(0, st.detN)) : '<div class="state"><h2>Nada con esos filtros</h2><p>Probá quitar alguno o cambiar la búsqueda.</p></div>') +
+      (rows.length ? agrupar(rows.slice(0, st.detN)) : '<div class="state"><h2>Nada con esos filtros</h2><p>Prueba quitar alguno o cambiar la búsqueda.</p></div>') +
       (rows.length > st.detN ? '<button type="button" class="more" id="masFilas">Mostrar ' + Math.min(60, rows.length - st.detN) + ' más</button>' : '');
   }
   function vGastos() {
@@ -610,7 +610,7 @@ svg.ch .ln{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round
       '<div class="readout"><div class="k">' + cap(ml(m.mes)) + (m.enCurso ? ' · en curso' : '') + '</div><div class="big num ' + (m.neto >= 0 ? 'pos' : 'neg') + '">' + (m.neto < 0 ? '−' : '+') + money(m.neto) + '</div></div>' +
       '<div class="trio"><div><b>' + money0(m.ing) + '</b><span>entró</span></div><div><b>' + money0(m.gas) + '</b><span>salió</span></div>' +
       '<div><b class="' + (tasa === null ? '' : tasa >= 0 ? 'pos' : 'neg') + '">' + (tasa === null ? '—' : pct(tasa)) + '</b><span>ahorraste</span></div></div>' + cols +
-      '<p class="note">Tocá una barra para ver el mes. Inversión y ahorro no cuentan acá: es plata que cambia de bolsillo.</p></section>' +
+      '<p class="note">Toca una barra para ver el mes. Inversión y ahorro no cuentan acá: es plata que cambia de bolsillo.</p></section>' +
       '<section class="blk"><div class="hd"><h2>Cómo vas en el año</h2><span>' + ms.length + ' meses</span></div>' +
       '<div class="big num ' + (tot >= 0 ? 'pos' : 'neg') + '">' + (tot < 0 ? '−' : '+') + money(tot) + '</div>' +
       '<p class="lead">Te quedó ' + (ingT > 0 ? '<b>' + pct(tot / ingT * 100) + '</b> de todo lo que entró' : 'lo que ves') + '. Ese es el ritmo de ahorro del período.</p>' +
@@ -651,7 +651,7 @@ svg.ch .ln{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round
     return '<section class="blk"><div class="hd"><h2>Cuánto entra</h2><span>por mes</span></div>' +
       '<div class="readout"><div class="k">' + cap(ml(m.mes)) + (m.enCurso ? ' · en curso' : '') + '</div><div class="big num pos">' + money(m.ing) + '</div><div class="d">' + desglose + '</div></div>' + cols +
       '<div class="sgrid"><div><b>' + money0(prom) + '</b><span>promedio mensual</span></div><div><b>' + money0(ms.reduce(function (a, x) { return a + x.ing; }, 0)) + '</b><span>total del período</span></div></div>' +
-      '<p class="note">Tocá un mes para ver de qué se compone.</p></section>';
+      '<p class="note">Toca un mes para ver de qué se compone.</p></section>';
   }
   function vFlujo() { return seg('flujo', [['neto', 'Neto mensual'], ['ing', 'Ingresos']]) + (st.sub.flujo === 'neto' ? vNeto() : vIngresos()); }
 
@@ -716,7 +716,7 @@ svg.ch .ln{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round
     var hist = preguntas.map(function (p) {
       return '<div class="qa-q">' + esc(p.q) + '</div><div class="qa-a' + (p.err ? ' err' : '') + (p.wait ? ' wait' : '') + '">' + esc(p.a) + '</div>';
     }).join('');
-    return '<section class="blk"><div class="hd"><h2>Preguntale a tus datos</h2><span>Gemini</span></div>' +
+    return '<section class="blk"><div class="hd"><h2>Pregúntale a tus datos</h2><span>Gemini</span></div>' +
       '<p class="lead">Cada respuesta sale de una consulta de solo lectura sobre tus movimientos.</p>' +
       '<div class="sug">' + SUG.map(function (s) { return '<button type="button" data-sug="' + esc(s) + '">' + esc(s) + '</button>'; }).join('') + '</div></section>' +
       '<div class="chat" style="margin-top:14px;padding-bottom:70px">' + hist + '</div>';
@@ -762,7 +762,7 @@ svg.ch .ln{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round
     var ask = $('#askbar');
     if (st.tab === 'preguntar' && !ask) {
       var el = document.createElement('form'); el.id = 'askbar'; el.className = 'askbar';
-      el.innerHTML = '<input id="askIn" enterkeyhint="send" placeholder="Preguntá sobre tus gastos…" aria-label="Pregunta" autocomplete="off"><button type="submit">Enviar</button>';
+      el.innerHTML = '<input id="askIn" enterkeyhint="send" placeholder="Pregunta sobre tus gastos…" aria-label="Pregunta" autocomplete="off"><button type="submit">Enviar</button>';
       el.addEventListener('submit', function (e) { e.preventDefault(); var i = $('#askIn'); preguntar(i.value); i.value = ''; });
       $('.app').appendChild(el);
     } else if (st.tab !== 'preguntar' && ask) ask.remove();
@@ -850,7 +850,7 @@ svg.ch .ln{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round
       .then(function (rs) { rs.forEach(function (r) { if (!r.ok) throw new Error('El servidor respondió ' + r.status); }); return Promise.all(rs.map(function (r) { return r.json(); })); })
       .then(function (js) {
         D = js[0]; R = js[1].slice().sort(function (a, b) { return a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0; });
-        if (!D.porMes.length) { $('#screen').innerHTML = '<div class="state"><h2>La base está vacía</h2><p>Deslizá hacia abajo para traer el Google Sheet.</p></div>'; return; }
+        if (!D.porMes.length) { $('#screen').innerHTML = '<div class="state"><h2>La base está vacía</h2><p>Desliza hacia abajo para traer el Google Sheet.</p></div>'; return; }
         armarColores();
         var ms = D.porMes;
         $('#rango').textContent = cap(ml(ms[0].mes)) + ' a ' + ml(ms[ms.length - 1].mes) + ' ' + ms[ms.length - 1].mes.slice(0, 4);
@@ -859,7 +859,7 @@ svg.ch .ln{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round
       .catch(function (err) {
         if (intento < REINTENTOS.length) return new Promise(function (ok) { setTimeout(ok, REINTENTOS[intento]); }).then(function () { return cargar(intento + 1); });
         if (D) { toast('No pude recargar: ' + err.message); return; }
-        $('#screen').innerHTML = '<div class="state"><h2>No pude leer los datos</h2><p>' + esc(err.message) + '. Fuera de casa, revisá que Tailscale esté conectado.</p><button type="button" id="reint">Reintentar</button></div>';
+        $('#screen').innerHTML = '<div class="state"><h2>No pude leer los datos</h2><p>' + esc(err.message) + '. Fuera de casa, revisa que Tailscale esté conectado.</p><button type="button" id="reint">Reintentar</button></div>';
         $('#reint').onclick = function () { cargar(); };
       });
   }
@@ -888,7 +888,7 @@ svg.ch .ln{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round
       sc.style.transition = anim ? 'transform .3s' : 'none';
       ptr.style.transform = 'translateY(' + (v - 44) + 'px)'; ptr.style.opacity = Math.min(1, v / 40);
       sc.style.transform = v ? 'translateY(' + v + 'px)' : '';
-      txt.textContent = sincronizando ? 'Sincronizando…' : d > UMBRAL ? 'Soltá para sincronizar' : 'Deslizá para sincronizar';
+      txt.textContent = sincronizando ? 'Sincronizando…' : d > UMBRAL ? 'Suelta para sincronizar' : 'Desliza para sincronizar';
     }
     sc.addEventListener('touchstart', function (e) { if (sc.scrollTop <= 0 && !sincronizando && e.touches.length === 1) { y0 = e.touches[0].clientY; dy = 0; } else y0 = null; }, { passive: true });
     sc.addEventListener('touchmove', function (e) {

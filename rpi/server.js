@@ -611,7 +611,7 @@ async function manejarPreguntaAlexa(req, res) {
   // AMAZON.SearchQuery. Con la sesión abierta, una pregunta pelada no matchea
   // ningún intent y Alexa cierra con EXCEEDED_MAX_REPROMPTS. Por eso el saludo
   // dicta la fórmula en vez de preguntar abierto.
-  const COMO_PREGUNTAR = 'Empezá con "dime" y tu pregunta. Por ejemplo: dime cuánto gasté en total.';
+  const COMO_PREGUNTAR = 'Empieza con "dime" y tu pregunta. Por ejemplo: dime cuánto gasté en total.';
 
   if (tipo === 'LaunchRequest') {
     return hablar('Hola. ' + COMO_PREGUNTAR, COMO_PREGUNTAR);
@@ -635,7 +635,7 @@ async function manejarPreguntaAlexa(req, res) {
   // Después de responder se sigue escuchando, para poder encadenar preguntas
   // sin tener que decir "abre finanzas" de nuevo. Si no se dice nada, Alexa
   // lanza el reprompt y recién ahí cierra sola.
-  const SEGUIR = '¿Algo más? Empezá con "dime", o decí "para" para terminar.';
+  const SEGUIR = '¿Algo más? Empieza con "dime", o di "para" para terminar.';
 
   try {
     const resultado = await askQuestion(pregunta);
@@ -793,7 +793,7 @@ async function enviarResumenSemanal() {
   const aviso = {
     topic: RESUMEN_TOPIC,
     title: 'Tu resumen semanal está listo',
-    message: 'Tocá para ver cómo te fue esta semana.',
+    message: 'Toca para ver cómo te fue esta semana.',
     tags: ['bar_chart'],
     priority: 3,
   };
