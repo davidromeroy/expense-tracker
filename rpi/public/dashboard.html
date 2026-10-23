@@ -446,7 +446,8 @@ svg.ch .ln{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round
         ? 'Gastaste <b>' + pct(tot / ing * 100) + '</b> de lo que entró (' + money0(ing) + '). Te quedaron <b class="pos">' + money0(ing - tot) + '</b>.'
         : 'Gastaste <b class="neg">' + pct(tot / ing * 100) + '</b> de lo que entró: ' + money0(tot - ing) + ' más de lo que ingresó.')
       : '<b>' + esc(list[0].categoria) + '</b> se lleva ' + pct(list[0].total / tot * 100) + ' del gasto.';
-    var mx = porIng ? ing : list[0].total;
+    // La barra mide lo mismo que el % de al lado: todas juntas suman 100 % del total.
+    var mx = base;
     var filas = list.map(function (c) {
       return '<button type="button" class="rk" data-cat="' + esc(c.categoria) + '" aria-haspopup="dialog">' +
         '<span class="t"><i class="sw" style="background:var(' + colCat(c.categoria) + ')"></i><span class="n">' + esc(c.categoria) + '</span><span class="v">' + money0(c.total) + '<small>' + pct(c.total / base * 100) + '</small></span></span>' +
@@ -506,7 +507,7 @@ svg.ch .ln{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round
       '<div class="stack">' + list.map(function (c) { return '<i style="width:' + (c.total / tot * 100).toFixed(2) + '%;background:var(' + colMet(c.metodo) + ')"></i>'; }).join('') + '</div>' +
       '<div class="rank">' + list.map(function (c) {
         return '<div class="rk"><div class="t"><i class="sw" style="background:var(' + colMet(c.metodo) + ')"></i><span class="n">' + esc(c.metodo.replace('Tarjeta de ', 'T. ')) + '</span><span class="v">' + money0(c.total) + '<small>' + pct(c.total / tot * 100) + '</small></span></div>' +
-          '<div class="b"><i style="width:' + Math.max(1, c.total / list[0].total * 100).toFixed(1) + '%;background:var(' + colMet(c.metodo) + ')"></i></div>' +
+          '<div class="b"><i style="width:' + Math.max(1, c.total / tot * 100).toFixed(1) + '%;background:var(' + colMet(c.metodo) + ')"></i></div>' +
           '<div class="s"><span>' + c.n + ' mov. · ' + pct(c.n / totN * 100) + ' de la cantidad · ticket ' + money(c.total / c.n) + '</span></div></div>';
       }).join('') + '</div></section>';
   }
@@ -533,13 +534,13 @@ svg.ch .ln{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round
         '<span class="sv">' + (v && k === iMax ? money0(v) : '') + '</span><span class="sb">' + (v === null ? '<i class="fut"></i>' : '<i style="height:' + (v ? Math.max(3, v / maxD * 100) : 0).toFixed(1) + '%"></i>') + '</span>' +
         '<em>' + ['L', 'M', 'X', 'J', 'V', 'S', 'D'][k] + '</em></div>';
     }).join('');
-    var cats = (w.categorias || []).slice(0, 6), mxc = cats.length ? cats[0].total : 1;
+    var cats = (w.categorias || []).slice(0, 6);
     return ch + '<section class="blk"><div class="hd"><h2>Tu semana</h2><span>lunes a domingo</span></div>' +
       '<div class="readout"><div class="k">Gastado' + (w.enCurso && w.dias < 7 ? ' en ' + w.dias + (w.dias === 1 ? ' día' : ' días') : '') + '</div><div class="big num">' + money(w.gasto) + '</div>' + delta + '</div>' +
       '<div class="sdias">' + dias + '</div>' +
       (cats.length ? '<div class="rank">' + cats.map(function (c) {
         return '<div class="rk"><div class="t"><i class="sw" style="background:var(' + colCat(c.categoria) + ')"></i><span class="n">' + esc(c.categoria) + '</span><span class="v">' + money(c.total) + '<small>' + pct(c.total / w.gasto * 100) + '</small></span></div>' +
-          '<div class="b"><i style="width:' + (c.total / mxc * 100).toFixed(1) + '%;background:var(' + colCat(c.categoria) + ')"></i></div></div>';
+          '<div class="b"><i style="width:' + Math.max(1, c.total / w.gasto * 100).toFixed(1) + '%;background:var(' + colCat(c.categoria) + ')"></i></div></div>';
       }).join('') + '</div>' : '') +
       (w.mayor ? '<p class="note">Gasto más grande: <b>' + money(w.mayor.monto) + '</b> · ' + esc(w.mayor.categoria) + (w.mayor.nota ? ' · ' + esc(w.mayor.nota) : '') + '</p>' : '') +
       (w.enCurso && w.dias < 7 ? '<p class="note">La comparación usa solo los primeros ' + w.dias + (w.dias === 1 ? ' día' : ' días') + ' de la semana anterior, para que sea justa.</p>' : '') + '</section>';
