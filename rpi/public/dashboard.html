@@ -881,12 +881,16 @@ svg.ch .ln{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round
   // del todo; el arrastre se amortigua (cuanto más tirás, menos sigue al dedo).
   (function () {
     var sc = $('#screen'), ptr = $('#ptr'), txt = $('#ptrTxt'), y0 = null, dy = 0, UMBRAL = 70;
+    // La pastilla va justo debajo del encabezado, con su altura real: en la app
+    // instalada el encabezado es más alto que en Safari y una altura fija la cortaba.
+    function ubicar() { ptr.style.top = $('.top').offsetHeight + 'px'; }
+    ubicar(); window.addEventListener('resize', ubicar);
     function goma(d) { return (d * 0.55 * 160) / (160 + 0.55 * d); }
     function pintar(d, anim) {
       var v = goma(d);
       ptr.style.transition = anim ? 'transform .3s, opacity .3s' : 'none';
       sc.style.transition = anim ? 'transform .3s' : 'none';
-      ptr.style.transform = 'translateY(' + (v - 44) + 'px)'; ptr.style.opacity = Math.min(1, v / 40);
+      ptr.style.transform = 'translateY(' + Math.min(8, v * 1.4 - 36).toFixed(1) + 'px)'; ptr.style.opacity = Math.min(1, v / 25);
       sc.style.transform = v ? 'translateY(' + v + 'px)' : '';
       txt.textContent = sincronizando ? 'Sincronizando…' : d > UMBRAL ? 'Suelta para sincronizar' : 'Desliza para sincronizar';
     }
