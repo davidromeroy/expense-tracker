@@ -25,6 +25,13 @@
 Description=Expense Tracker Dashboard
 After=network-online.target
 Wants=network-online.target
+# Bucle de reinicios = 5 arranques en 5 minutos. Con RestartSec=5 eso es un
+# proceso que muere al arrancar, no un crash suelto. Al llegar al límite la
+# unidad queda en failed y se dispara la reparación (npm ci), que la vuelve a
+# levantar. Ver recovery/repair-node-modules.sh.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+OnFailure=expense-tracker-repair.service
 
 [Service]
 Type=simple

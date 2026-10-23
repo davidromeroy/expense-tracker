@@ -28,6 +28,7 @@
 // puede traer un módulo ESM desde código CJS, cacheado en el módulo para
 // no reimportar en cada pregunta.
 const { db } = require('./db');
+const { fechaLocal } = require('./semana');
 
 // gemini-3.6-flash agotó su cuota gratis (20 req/día) el 2026-09-12 con muy
 // poco uso real de por medio. gemini-3.5-flash-lite tiene cuota separada
@@ -134,7 +135,9 @@ async function askQuestion(pregunta) {
 }
 
 async function askQuestionInner(pregunta) {
-  const today = new Date().toISOString().slice(0, 10);
+  // Fecha local, no UTC: a las 20:00 de Ecuador la UTC ya es "mañana" y la
+  // pregunta "cuánto gasté hoy" consultaría un día sin movimientos.
+  const today = fechaLocal();
   const ai = await getAi();
 
   const response = await ai.models.generateContent({

@@ -1,0 +1,12 @@
+# Cada 2 minutos. El primer chequeo espera 3 minutos tras el arranque: el
+# wifi tarda en asociarse y no queremos contar eso como "sin red".
+[Unit]
+Description=Chequeo de red cada 2 minutos
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=2min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

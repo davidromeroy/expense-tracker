@@ -1,0 +1,8 @@
+# Un chequeo de red. Lo dispara net-watchdog.timer; ver net-watchdog.sh.
+[Unit]
+Description=Watchdog de red (reconecta, restaura el perfil wifi o reinicia)
+After=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/net-watchdog

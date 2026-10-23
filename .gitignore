@@ -2,6 +2,9 @@ node_modules/
 .env
 service-account.json
 *.db
+# SQLite en modo WAL deja estos dos al lado de la base mientras corre
+*.db-wal
+*.db-shm
 .DS_Store
 
 # Guía interna para Claude Code: contexto de trabajo, no artefacto del proyecto

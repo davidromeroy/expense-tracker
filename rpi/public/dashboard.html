@@ -327,24 +327,28 @@ html.modal-abierto{overflow:hidden}
 .met-bar{height:8px;border-radius:4px;background:var(--line);margin:6px 0 5px;overflow:hidden}
 .met-bar i{display:block;height:100%;border-radius:4px}
 .met-sub{font-size:11px;color:var(--ink-2)}
-/* Evolución: barras apiladas por mes */
-.escroll{overflow-x:auto;margin:14px 0 8px;-webkit-overflow-scrolling:touch}
-.ecols{display:flex;gap:6px;min-width:100%;width:max-content;align-items:flex-end}
-.ecol{flex:1 0 40px;display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:0;padding:4px 0;cursor:pointer;color:var(--ink-2);font:inherit;position:relative}
-.ecol::after{content:"";position:absolute;inset:-4px -3px}
-.etot{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
-.estack{display:flex;flex-direction:column-reverse;justify-content:flex-start;height:150px;width:100%;max-width:34px;border-radius:5px;overflow:hidden;opacity:.55}
-.estack i{display:block;width:100%}
-.ecol[aria-pressed="true"] .estack{opacity:1;outline:2px solid var(--ink-3);outline-offset:2px}
-.ecol[data-curso="1"] .estack{opacity:.35}
-.ecol[data-curso="1"][aria-pressed="true"] .estack{opacity:.7}
-.emes{font-size:11px;font-weight:600}
-.ecol:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
-.edet{background:var(--card-2);border-radius:10px;padding:10px 12px;margin:6px 0 10px}
-.edet h4{margin:0 0 6px;font-size:13px;color:var(--ink)}
-.edet .r{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2);padding:2px 0}
-.edet .r i{width:9px;height:9px;border-radius:3px;flex:0 0 auto}
-.edet .r b{margin-left:auto;color:var(--ink);font-family:var(--mono);font-variant-numeric:tabular-nums}
+/* Semana: cifra grande, barras por día y detalle */
+.met-list.sem{padding:0 20px}
+.shero{padding:14px 20px 0}
+.slbl{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.snum{font-family:var(--dsp);font-weight:700;font-size:40px;letter-spacing:-.02em;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums;margin:2px 0 4px}
+.sdl{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;min-height:20px}
+.sdelta{font-size:13px;color:var(--ink-2)}
+.sdelta.baja,.sdelta.sube{font-family:var(--mono);font-weight:600;font-size:12.5px}
+.sdelta.baja{color:var(--pos)}
+.sdelta.sube{color:var(--neg)}
+.sdias{display:flex;gap:6px;padding:18px 20px 4px;align-items:flex-end}
+.sdia{flex:1 1 0;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0}
+.sval{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;height:14px;white-space:nowrap}
+.sbar{display:flex;align-items:flex-end;width:100%;max-width:34px;height:110px;border-bottom:1px solid var(--line)}
+.sbar i{display:block;width:100%;background:var(--brand);border-radius:5px 5px 0 0}
+.sbar i.futuro{height:100%;background:none;border:1px dashed var(--line);border-bottom:0;border-radius:5px 5px 0 0;opacity:.7}
+.sbar.cero i{height:0}
+.sdn{font-size:11px;font-weight:600;color:var(--ink-2)}
+.sdatos{margin:12px 20px 0;background:var(--card-2);border-radius:10px;padding:8px 12px}
+.sfila{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:13px;color:var(--ink-2);padding:3px 0}
+.sfila b{color:var(--ink);font-family:var(--mono);font-variant-numeric:tabular-nums}
+.ssub{font-size:12px;color:var(--ink-3);padding:0 0 4px;overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -428,9 +432,8 @@ html.modal-abierto{overflow:hidden}
   var catMes = -1;   // -1 = todo; mes elegido en Categorías (independiente de mesSel y detFiltro.mes)
   var catBase = 'gasto'; // Categorías: el % se calcula sobre 'gasto' (suma 100%) o sobre 'ingreso' (no suma 100%)
   var catSegs = [];      // porciones del anillo de Categorías tal como se pintaron; el clic las resuelve por índice
-  var modoEvo = 'usd';
   var metMes = -1;   // mes elegido en Métodos (-1 = todo)
-  var evoSel = -1;   // mes resaltado en Evolución (-1 = el último)
+  var semSel = -1;   // semana elegida en Semana (-1 = la actual, la última)
   var verFondo = false;     // tarjeta Invertido <-> Fondo de emergencia
   var verLiquidez = false;  // tarjeta Neto <-> Liquidez
 
@@ -1062,53 +1065,98 @@ html.modal-abierto{overflow:hidden}
       ' meses de gasto al ritmo actual.</div></section>';
   }
 
-  // ---------- panel: evolución ----------
-  // Una barra por mes, apilada por método: se ve cómo cambia la mezcla sin 6 líneas cruzadas.
-  // HTML y no SVG para que el texto no se achique en el teléfono.
-  function panelEvolucion() {
-    var mm = D.metodosMes;
-    var metodos = D.porMetodo.map(function (m) { return m.metodo; });
-    var campo = modoEvo === 'mov' ? 'n' : 'total';
-    var valor = function (m, met) { return (m.metodos[met] || {})[campo] || 0; };
-    var totales = mm.map(function (m) {
-      return metodos.reduce(function (a, met) { return a + valor(m, met); }, 0);
-    });
-    var max = Math.max.apply(null, totales) || 1;
-    var fmt = function (v) { return modoEvo === 'mov' ? String(v) : money0(v); };
-    if (evoSel >= mm.length) evoSel = -1;
-    var sel = evoSel < 0 ? mm.length - 1 : evoSel;
+  // ---------- panel: semana ----------
+  // Semanas de lunes a domingo. Los cálculos vienen hechos del server
+  // (D.semanas, ver semana.js): acá solo se dibuja. HTML y no SVG para que el
+  // texto no se achique en el teléfono.
+  //
+  // No muestra ingresos ni neto a propósito: el sueldo es quincenal, así que
+  // una de cada dos semanas daría un neto negativo sin significar nada.
+  var DIAS_CORTO = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+  var DIAS_LARGO = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+  function diaMes(f) { return parseInt(f.slice(8, 10), 10) + ' ' + nombreMes(f.slice(0, 7), true); }
+  function rangoSemana(w) {
+    var a = parseInt(w.desde.slice(8, 10), 10), b = parseInt(w.hasta.slice(8, 10), 10);
+    return w.desde.slice(0, 7) === w.hasta.slice(0, 7)
+      ? a + '–' + b + ' ' + nombreMes(w.hasta.slice(0, 7), true)
+      : diaMes(w.desde) + ' – ' + diaMes(w.hasta);
+  }
 
-    var cols = mm.map(function (m, i) {
-      var segs = metodos.map(function (met) {
-        var v = valor(m, met);
-        return v ? '<i style="height:' + (v / max * 100).toFixed(2) + '%;background:var(' + colorMetodo(met) + ')"></i>' : '';
-      }).join('');
-      return '<button type="button" class="ecol" data-es="' + i + '" aria-pressed="' + (sel === i) + '"' +
-        (m.enCurso ? ' data-curso="1"' : '') + ' aria-label="' + esc(cap(nombreMes(m.mes)) + ': ' + fmt(totales[i])) + '">' +
-        '<span class="etot">' + fmt(totales[i]) + '</span><span class="estack">' + segs + '</span>' +
-        '<span class="emes">' + cap(nombreMes(m.mes, true)) + (m.enCurso ? '*' : '') + '</span></button>';
+  function panelSemana() {
+    var ws = D.semanas || [];
+    if (!ws.length) return '<section class="panel"><div class="state"><h2>Sin datos de semanas</h2></div></section>';
+    if (semSel < 0 || semSel >= ws.length) semSel = ws.length - 1;
+    var w = ws[semSel];
+
+    var chips = ws.map(function (x, i) {
+      return '<button class="mchip" data-sm="' + i + '" role="tab" aria-selected="' + (i === semSel) + '">' +
+        rangoSemana(x) + (x.enCurso ? ' · en curso' : '') + '</button>';
     }).join('');
 
-    var m = mm[sel];
-    var detalle = metodos.map(function (met) { return { met: met, v: valor(m, met) }; })
-      .filter(function (f) { return f.v; }).sort(function (a, b) { return b.v - a.v; })
-      .map(function (f) {
-        return '<div class="r"><i style="background:var(' + colorMetodo(f.met) + ')"></i>' +
-          esc(f.met.replace('Tarjeta de ', 'T. ')) + '<b>' + fmt(f.v) + (modoEvo === 'mov' ? ' mov.' : '') + '</b></div>';
-      }).join('');
+    // Comparación: la semana en curso se mide contra la anterior HASTA EL
+    // MISMO DÍA (w.previo ya viene recortado así). Flecha + palabra, no solo
+    // color: un número verde o rojo suelto no dice nada a quien no distingue
+    // los dos. Gastar menos es la dirección "buena".
+    var delta;
+    if (!w.previo.gasto) {
+      delta = '<span class="sdelta nd">Sin gastos en la semana anterior para comparar</span>';
+    } else {
+      var dif = (w.gasto - w.previo.gasto) / w.previo.gasto * 100;
+      if (Math.abs(dif) < 0.5) {
+        delta = '<span class="sdelta nd">≈ igual que la semana anterior</span>';
+      } else {
+        delta = '<span class="sdelta ' + (dif < 0 ? 'baja' : 'sube') + '">' + (dif < 0 ? '▼ ' : '▲ ') +
+          pct(Math.abs(dif)) + ' ' + (dif < 0 ? 'menos' : 'más') + '</span>' +
+          '<span class="sdelta nd">que la anterior (' + money0(w.previo.gasto) + ')</span>';
+      }
+    }
 
+    // Barras por día. Solo se rotula la más alta: un número en cada barra
+    // son siete cifras que compiten; el resto se lee por altura, y cada barra
+    // lleva su valor en el aria-label/title para quien lo quiera.
+    var maxDia = Math.max.apply(null, w.porDia.map(function (v) { return v || 0; })) || 1;
+    var iMax = w.porDia.indexOf(maxDia);
+    var dias = w.porDia.map(function (v, i) {
+      var fecha = new Date(Date.UTC(+w.desde.slice(0, 4), +w.desde.slice(5, 7) - 1, +w.desde.slice(8, 10) + i)).toISOString().slice(0, 10);
+      var etiqueta = cap(DIAS_LARGO[i]) + ' ' + diaMes(fecha) + (v === null ? ': todavía no llega' : ': ' + money(v));
+      var barra = v === null ? '<i class="futuro"></i>'
+        : '<i style="height:' + (v ? Math.max(3, v / maxDia * 100) : 0).toFixed(1) + '%"></i>';
+      return '<div class="sdia" role="img" aria-label="' + esc(etiqueta) + '" title="' + esc(etiqueta) + '">' +
+        '<span class="sval">' + (v && i === iMax ? money0(v) : '') + '</span>' +
+        '<span class="sbar' + (v === 0 ? ' cero' : '') + '">' + barra + '</span>' +
+        '<span class="sdn">' + DIAS_CORTO[i] + '</span></div>';
+    }).join('');
+
+    // Categorías: las 5 mayores; el resto se junta para que sume el total.
+    var top = w.categorias.slice(0, 5);
+    var resto = w.categorias.slice(5).reduce(function (a, c) { return a + c.total; }, 0);
+    var maxCat = top.length ? top[0].total : 1;
+    var cats = top.map(function (c) {
+      return '<div class="met-item"><div class="met-top"><span class="met-nom">' + esc(c.categoria) + '</span>' +
+        '<span class="met-val">' + money(c.total) + ' <small>' + pct(c.total / w.gasto * 100) + '</small></span></div>' +
+        '<div class="met-bar"><i style="width:' + (c.total / maxCat * 100).toFixed(1) + '%;background:var(--brand)"></i></div></div>';
+    }).join('') + (resto > 0
+      ? '<div class="met-item"><div class="met-top"><span class="met-nom">Otras categorías</span><span class="met-val">' +
+        money(resto) + ' <small>' + pct(resto / w.gasto * 100) + '</small></span></div></div>' : '');
+
+    var mayor = w.mayor
+      ? '<div class="sfila"><span>Gasto más grande</span><b>' + money(w.mayor.monto) + '</b></div>' +
+        '<div class="ssub">' + esc(w.mayor.categoria) + (w.mayor.nota ? ' · ' + esc(w.mayor.nota) : '') + ' · ' + diaMes(w.mayor.fecha) + '</div>'
+      : '';
+
+    var vacia = w.n === 0;
     return '<section class="panel">' +
-      '<div class="phead"><h2>Cómo cambia la mezcla</h2><span class="tag">por mes</span></div>' +
-      '<div class="tools"><span class="lbl">Medir en</span><div class="seg" role="group" aria-label="Unidad">' +
-      '<button type="button" data-modo="usd" aria-pressed="' + (modoEvo === 'usd') + '">Dólares</button>' +
-      '<button type="button" data-modo="mov" aria-pressed="' + (modoEvo === 'mov') + '">Movimientos</button></div></div>' +
-      '<div class="escroll"><div class="ecols">' + cols + '</div></div>' +
-      '<div class="edet"><h4>' + esc(cap(nombreMes(m.mes))) + (m.enCurso ? ' · en curso' : '') + '</h4>' + (detalle || '<div class="r">Sin gastos</div>') + '</div>' +
-      '<div class="legend">' + metodos.map(function (met) {
-        return '<span><i style="background:var(' + colorMetodo(met) + ')"></i>' + esc(met.replace('Tarjeta de ', 'T. ')) + '</span>';
-      }).join('') + '</div>' +
-      (mm.some(function (x) { return x.enCurso; }) ? '<div class="read">* mes en curso, todavía no cerró.</div>' : '') +
-      '</section>';
+      '<div class="phead"><h2>Tu semana</h2><span class="tag">' + rangoSemana(w) + (w.enCurso ? ' · en curso' : '') + '</span></div>' +
+      '<div class="mesbar" role="tablist" aria-label="Semana">' + chips + '</div>' +
+      '<div class="shero"><div class="slbl">Gastado' + (w.enCurso && w.dias < 7 ? ' en ' + w.dias + (w.dias === 1 ? ' día' : ' días') : '') + '</div>' +
+        '<div class="snum">' + money(w.gasto) + '</div><div class="sdl">' + (vacia ? '<span class="sdelta nd">Sin gastos registrados</span>' : delta) + '</div></div>' +
+      '<div class="sdias" role="group" aria-label="Gasto por día">' + dias + '</div>' +
+      (vacia ? '' :
+        '<div class="sdatos"><div class="sfila"><span>Movimientos</span><b>' + w.n + (w.n === 1 ? ' gasto' : ' gastos') + '</b></div>' + mayor + '</div>' +
+        '<div class="met-list sem">' + cats + '</div>') +
+      '<div class="read">Semanas de lunes a domingo.' +
+        (w.enCurso && w.dias < 7 ? ' La comparación usa solo los primeros ' + w.dias + (w.dias === 1 ? ' día' : ' días') + ' de la semana anterior, para que sea justa.' : '') +
+        ' No incluye ingresos: tu sueldo es quincenal y una semana suelta no lo refleja.</div></section>';
   }
 
   // ---------- panel: detalle (tabla filtrable) ----------
@@ -1297,7 +1345,7 @@ html.modal-abierto{overflow:hidden}
     { id: 'ingresos', nom: 'Ingresos', fn: panelIngresos },
     { id: 'inv', nom: 'Inversiones', fn: panelInversiones },
     { id: 'pat', nom: 'Patrimonio', fn: panelPatrimonio },
-    { id: 'evo', nom: 'Evolución', fn: panelEvolucion },
+    { id: 'semana', nom: 'Semana', fn: panelSemana },
     { id: 'detalle', nom: 'Detalle', fn: panelDetalle },
     { id: 'preguntas', nom: 'Preguntas', fn: panelPreguntas }
   ];
@@ -1451,8 +1499,8 @@ html.modal-abierto{overflow:hidden}
     [].forEach.call(document.querySelectorAll('.mchip[data-mm]'), function (c) {
       c.addEventListener('click', function () { metMes = Number(c.dataset.mm); pintarPanel(); });
     });
-    [].forEach.call(document.querySelectorAll('.ecol[data-es]'), function (c) {
-      c.addEventListener('click', function () { evoSel = Number(c.dataset.es); pintarPanel(); });
+    [].forEach.call(document.querySelectorAll('.mchip[data-sm]'), function (c) {
+      c.addEventListener('click', function () { semSel = Number(c.dataset.sm); pintarPanel(); });
     });
     [].forEach.call(document.querySelectorAll('.mchip[data-cm]'), function (c) {
       c.addEventListener('click', function () { catMes = Number(c.dataset.cm); pintarPanel(); });
@@ -1480,17 +1528,10 @@ html.modal-abierto{overflow:hidden}
     centrarChipElegido('.mchip[data-m]');   // Resumen
     centrarChipElegido('.mchip[data-cm]');  // Categorías
     centrarChipElegido('.mchip[data-mm]');  // Métodos
-    var ec = document.querySelector('.ecol[aria-pressed="true"]');   // Evolución: barra activa a la vista
-    if (ec) {
-      var sc = ec.closest('.escroll'), sb = sc.getBoundingClientRect(), er = ec.getBoundingClientRect();
-      sc.scrollLeft += (er.left - sb.left) - (sb.width - er.width) / 2;
-    }
+    centrarChipElegido('.mchip[data-sm]');  // Semana
     centrarChipElegido('.mchip[data-dm]');  // Detalle
     [].forEach.call(document.querySelectorAll('.sparkbar'), function (r) {
       r.addEventListener('click', function () { mesSel = Number(r.dataset.i); pintarPanel(); });
-    });
-    [].forEach.call(document.querySelectorAll('.seg button[data-modo]'), function (b) {
-      b.addEventListener('click', function () { modoEvo = b.dataset.modo; pintarPanel(); });
     });
 
 

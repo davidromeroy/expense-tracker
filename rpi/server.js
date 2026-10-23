@@ -18,6 +18,7 @@ const alexaVerifier = require('alexa-verifier').default;
 const { db, getMeta } = require('./db');
 const { syncOnce } = require('./sync');
 const { askQuestion } = require('./chatbot');
+const { calcularSemanas, fechaLocal } = require('./semana');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -290,7 +291,9 @@ app.get('/api/dashboard', (_req, res) => {
       .filter((r) => !fechaInicioTracking || r.fecha >= fechaInicioTracking)
       .map((r) => r.fecha.slice(0, 7))
   )].sort();
-  const hoy = new Date().toISOString().slice(0, 10);
+  // Fecha LOCAL: la UTC adelanta el día desde las 19:00 de Ecuador, y el último
+  // día del mes el dashboard ya trataba el mes siguiente como "en curso".
+  const hoy = fechaLocal();
   const mesEnCurso = hoy.slice(0, 7);
 
   const porMes = meses.map((mes) => {
@@ -459,6 +462,7 @@ app.get('/api/dashboard', (_req, res) => {
     porCategoria,
     porMetodo,
     metodosMes,
+    semanas: calcularSemanas(gastos, hoy),
     invMes,
     topGastos: [...gastos]
       .sort((a, b) => b.monto - a.monto)
@@ -667,7 +671,9 @@ app.post('/api/sync', async (_req, res) => {
 // (no llega latido), y proceso vivo pero sync roto o disco lleno (llega
 // latido a /fail con el motivo). En el corte de luz del 2026-10-07 la Pi
 // estuvo 7 días caída sin que nada avisara.
-const HC_PING_URL = process.env.HC_PING_URL;
+// .trim(): al pegar la URL desde el celular se coló un espacio al final. Node
+// lo tolera, pero curl la rechaza, y un espacio en el medio rompería el latido.
+const HC_PING_URL = (process.env.HC_PING_URL || '').trim();
 const HC_INTERVAL_MIN = Number(process.env.HC_INTERVAL_MIN || 5);
 // Tolera un sync fallido suelto (Google a veces devuelve 5xx): solo es
 // problema si pasaron ~3 intervalos sin ninguno bueno.
@@ -730,10 +736,10 @@ app.get('/api/health', (_req, res) => {
 
 // https.request en vez de fetch(): fetch global recién es estable en Node 18
 // y este latido no puede depender de la versión de Node instalada en la Pi.
-function enviarLatido(url, cuerpo) {
+function enviarLatido(url, cuerpo, headers) {
   return new Promise((resolve, reject) => {
     const cliente = url.startsWith('http:') ? http : https;
-    const req = cliente.request(url, { method: 'POST', timeout: 10000 }, (res) => {
+    const req = cliente.request(url, { method: 'POST', timeout: 10000, headers }, (res) => {
       res.resume();
       res.on('end', () => resolve(res.statusCode));
     });
@@ -750,7 +756,11 @@ async function reportarSalud() {
   try {
     // El cuerpo aparece en el panel de healthchecks.io y en el aviso: así el
     // mensaje dice POR QUÉ falló, no solo que falló.
-    await enviarLatido(url, JSON.stringify(estado, null, 2));
+    const codigo = await enviarLatido(url, JSON.stringify(estado, null, 2));
+    // healthchecks.io responde 200 si lo aceptó. Un 404 es una URL mal escrita
+    // o un check borrado: sin esta línea el latido "salía" y nadie se enteraba
+    // de que no estaba llegando a ningún lado.
+    if (codigo !== 200) console.error(`[health] healthchecks.io respondió ${codigo}, el latido no se registró`);
   } catch (err) {
     // Sin red no hay nada que hacer acá: la ausencia de latido ES la alarma.
     console.error('[health] no se pudo enviar el latido:', err.message);
@@ -762,6 +772,53 @@ if (HC_PING_URL) {
 } else {
   console.warn('[health] HC_PING_URL vacío — sin aviso externo de caídas');
 }
+
+// --- Aviso semanal por ntfy ---
+//
+// El push es genérico a propósito: ntfy.sh es un servidor público y sin cifrar,
+// y lo único que protege un tema es que nadie conozca su nombre. Las cifras
+// quedan dentro de la Pi y se ven al tocar el aviso (el dashboard, por
+// Tailscale). Tema propio, distinto del de las alertas de caída: un resumen
+// no debe mezclarse con una alarma.
+const NTFY_SERVER = (process.env.NTFY_SERVER || 'https://ntfy.sh').trim().replace(/\/+$/, '');
+const RESUMEN_TOPIC = (process.env.RESUMEN_NTFY_TOPIC || '').trim();
+const RESUMEN_URL = (process.env.RESUMEN_URL || '').trim();
+// Domingo 20:00 hora de Ecuador. Con `timezone`, no depende del huso de la Pi.
+const RESUMEN_CRON = (process.env.RESUMEN_CRON || '0 20 * * 0').trim();
+
+async function enviarResumenSemanal() {
+  if (!RESUMEN_TOPIC) throw new Error('RESUMEN_NTFY_TOPIC vacío');
+  // Publicación en JSON a la raíz del servidor: admite tildes y emojis en el
+  // título, cosa que los encabezados HTTP de la otra forma de publicar no.
+  const aviso = {
+    topic: RESUMEN_TOPIC,
+    title: 'Tu resumen semanal está listo',
+    message: 'Tocá para ver cómo te fue esta semana.',
+    tags: ['bar_chart'],
+    priority: 3,
+  };
+  if (RESUMEN_URL) aviso.click = RESUMEN_URL;
+  const codigo = await enviarLatido(NTFY_SERVER, JSON.stringify(aviso), { 'Content-Type': 'application/json' });
+  if (codigo !== 200) throw new Error(`ntfy respondió ${codigo}`);
+}
+
+if (RESUMEN_TOPIC) {
+  cron.schedule(RESUMEN_CRON, () => {
+    enviarResumenSemanal().catch((err) => console.error('[resumen] no se pudo enviar el aviso:', err.message));
+  }, { timezone: 'America/Guayaquil' });
+} else {
+  console.warn('[resumen] RESUMEN_NTFY_TOPIC vacío — sin aviso semanal');
+}
+
+// Para probar sin esperar al domingo: POST /api/resumen/enviar
+app.post('/api/resumen/enviar', async (_req, res) => {
+  try {
+    await enviarResumenSemanal();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Dashboard corriendo en http://0.0.0.0:${PORT}`);
