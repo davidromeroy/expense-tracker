@@ -142,6 +142,8 @@ button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--brand);out
 .kpis span{font-size:11.5px;color:var(--ink-2)}
 .months.cm{height:84px}
 .months.cm i{opacity:.4}
+.vc .tv{position:absolute;left:-4px;right:-4px;text-align:center;font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--ink-2)}
+.vc[aria-pressed="true"] .tv{color:var(--ink)}
 /* Ingresos: una fila por mes, lo que entró como pista y lo gastado llenándola */
 .cov{display:flex;flex-direction:column;gap:4px;margin-top:6px}
 .cv{display:block;width:100%;text-align:left;padding:9px 0;border-top:1px solid var(--line-2)}
@@ -402,8 +404,8 @@ svg.ch .ln{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round
 
   function filaMov(r) {
     var ing = r.tipo === 'Ingreso', col = r.tipo === 'Gasto' ? colCat(r.categoria) : ing ? '--pos' : '--s3';
-    var sub = [r.categoria, r.tipo !== 'Gasto' ? r.tipo : '', (r.metodo_pago || '').replace('Tarjeta de ', '')].filter(Boolean).join(' · ');
-    return '<div class="mv"><span class="dot" style="background:var(' + col + ')" aria-hidden="true">' + esc((r.categoria || '?').slice(0, 2)) + '</span>' +
+    var sub = (ing ? [tipoIng(r.nota), r.metodo_pago] : [r.categoria, r.tipo !== 'Gasto' ? r.tipo : '', r.metodo_pago]).filter(Boolean).join(' · ').replace(/Tarjeta de /g, '');
+    return '<div class="mv"><span class="dot" style="background:var(' + col + ')" aria-hidden="true">' + esc((ing ? tipoIng(r.nota) : r.categoria || '?').slice(0, 2)) + '</span>' +
       '<div class="tx"><b>' + esc(r.nota || r.categoria) + '</b><span>' + esc(sub) + '</span></div>' +
       '<span class="am' + (ing ? ' ing' : '') + '">' + (ing ? '+' : '−') + money(r.monto) + '</span></div>';
   }
@@ -641,30 +643,30 @@ svg.ch .ln{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round
     return 'Otros';
   }
   function vIngresos() {
-    var ms = meses(), primer = ms[0].mes, porTipo = {}, totIng = 0;
+    var ms = meses(), i = idxMes(st.iSel, ms.length), H = 190, por = {};
     R.forEach(function (r) {
-      if (r.tipo !== 'Ingreso' || r.fecha.slice(0, 7) < primer) return;
-      var t = tipoIng(r.nota); porTipo[t] = (porTipo[t] || 0) + r.monto; totIng += r.monto;
+      if (r.tipo !== 'Ingreso') return;
+      var k = r.fecha.slice(0, 7); por[k] = por[k] || {}; var t = tipoIng(r.nota); por[k][t] = (por[k][t] || 0) + r.monto;
     });
-    var tipos = TIPOS_ING.filter(function (t) { return porTipo[t[0]]; });
+    var tot = ms.map(function (x) { return x.ing; });
+    var cols = vcols(ms.map(function (x) { return { pos: Math.max(x.ing, x.gas) * 1.15, neg: 0 }; }), i, 'is', H, function (k, z, sc) {
+      var o = por[ms[k].mes] || {}, acc = 0, out = '';
+      TIPOS_ING.forEach(function (t) { var h = (o[t[0]] || 0) * sc; if (h) { out += '<span class="sg" style="bottom:' + acc.toFixed(1) + 'px;height:' + Math.max(0, h - 2).toFixed(1) + 'px;background:var(' + t[1] + ');border-radius:3px"></span>'; acc += h; } });
+      var tt = ms[k].ing; out += tt ? '<span class="tv" style="bottom:' + (Math.max(tt, ms[k].gas) * sc + 4).toFixed(1) + 'px">' + (tt >= 1000 ? nf1.format(tt / 1000) + 'k' : nf0.format(tt)) + '</span>' : '';
+      return out + '<span class="mk" style="bottom:' + Math.max(0, ms[k].gas * sc - 1).toFixed(1) + 'px"></span>';
+    });
+    var m = ms[i], o = por[m.mes] || {};
     var cer = ms.filter(function (x) { return !x.enCurso; });
     var prom = cer.length ? cer.reduce(function (a, x) { return a + x.ing; }, 0) / cer.length : 0;
-    var maxIng = Math.max.apply(null, ms.map(function (x) { return Math.max(x.ing, x.gas); })) || 1;
-    // De lo que entró, cuánto se fue: la pista mide lo que entró, el relleno lo gastado.
-    var filas = ms.slice().reverse().map(function (x) {
-      var w = x.ing / maxIng * 100, uso = x.ing > 0 ? x.gas / x.ing : 1, over = x.gas > x.ing;
-      return '<div class="cv"><span class="t"><b>' + cap(ml(x.mes)) + (x.enCurso ? ' · en curso' : '') + '</b><span>entró ' + money0(x.ing) + '</span></span>' +
-        '<span class="tr" style="width:' + Math.max(over ? 100 : 6, w).toFixed(1) + '%"><i class="' + (over ? 'over' : '') + '" style="width:' + Math.min(100, uso * 100).toFixed(1) + '%"></i></span>' +
-        '<span class="s"><span>gastaste ' + (x.ing > 0 ? pct(uso * 100) : '—') + '</span><span class="q' + (over ? ' neg' : '') + '">' + (over ? 'faltaron ' : 'quedó ') + money0(x.ing - x.gas) + '</span></span></div>';
-    }).join('');
-    return '<section class="blk"><div class="hd"><h2>Cuánto entra</h2><span>' + ms.length + ' meses</span></div>' +
-      '<div class="big num pos">' + money(totIng) + '</div><p class="lead">Promedio por mes cerrado: <b>' + money0(prom) + '</b>.</p>' +
-      '<div class="mix" role="img" aria-label="Composición del ingreso">' + tipos.map(function (t) { return '<i style="width:' + (porTipo[t[0]] / totIng * 100).toFixed(2) + '%;background:var(' + t[1] + ')"></i>'; }).join('') + '</div>' +
-      '<div class="tiles" style="grid-template-columns:repeat(' + tipos.length + ',1fr)">' + tipos.map(function (t) { return '<div class="tile"><i style="background:var(' + t[1] + ')"></i><b>' + money0(porTipo[t[0]]) + '</b><span>' + t[0] + ' · ' + pct(porTipo[t[0]] / totIng * 100) + '</span></div>'; }).join('') + '</div>' +
-      '<p class="note">El tipo sale de la nota de cada ingreso.</p></section>' +
-      '<section class="blk"><div class="hd"><h2>De lo que entra, cuánto se va</h2><span>por mes</span></div>' +
-      '<div class="legend" style="margin:0 0 6px"><span><i style="background:var(--s2)"></i>Gastado</span><span><i style="background:color-mix(in srgb,var(--pos) 35%,transparent)"></i>Quedó</span><span><i style="background:var(--neg)"></i>Gastó más de lo que entró</span></div>' +
-      '<div class="cov">' + filas + '</div></section>';
+    var mejor = cer.reduce(function (b, x) { return !b || x.ing > b.ing ? x : b; }, null);
+    var usados = TIPOS_ING.filter(function (t) { return ms.some(function (x) { return (por[x.mes] || {})[t[0]]; }); });
+    return '<section class="blk"><div class="hd"><h2>Cuánto entra</h2><span>por mes</span></div>' +
+      '<div class="readout"><div class="k">' + cap(ml(m.mes)) + (m.enCurso ? ' · en curso' : '') + '</div><div class="big num pos">' + money(m.ing) + '</div>' +
+      '<div class="d">' + (TIPOS_ING.filter(function (t) { return o[t[0]]; }).map(function (t) { return t[0] + ' ' + money0(o[t[0]]); }).join(' · ') || 'Sin ingresos') + ' · gastó ' + money0(m.gas) + '</div></div>' + cols +
+      '<div class="legend">' + usados.map(function (t) { return '<span><i style="background:var(' + t[1] + ')"></i>' + t[0] + '</span>'; }).join('') +
+      '<span><i style="background:var(--neg);height:3px;border-radius:1px"></i>Gasto del mes</span></div>' +
+      '<div class="sgrid"><div><b>' + money0(prom) + '</b><span>promedio mensual</span></div>' + (mejor ? '<div><b>' + money0(mejor.ing) + '</b><span>mejor mes · ' + mc(mejor.mes) + '</span></div>' : '') + '</div>' +
+      '<p class="note">El tipo sale de la nota de cada ingreso (Quincena, Sueldo fin de mes, Décimo).</p></section>';
   }
   function vFlujo() { return seg('flujo', [['neto', 'Neto mensual'], ['ing', 'Ingresos']]) + (st.sub.flujo === 'neto' ? vNeto() : vIngresos()); }
 
@@ -797,6 +799,7 @@ svg.ch .ln{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round
     if ((el = q('[data-cmm]'))) { abrirCategoria(catModal.cat, el.dataset.cmm); return; }
     if (q('[data-cerrar]')) { $('#catSheet').close(); return; }
     if ((el = q('[data-ns]'))) { st.nSel = +el.dataset.ns; render(); return; }
+    if ((el = q('[data-is]'))) { st.iSel = +el.dataset.is; render(); return; }
     if ((el = q('[data-vs]'))) { st.invSel = +el.dataset.vs; render(); return; }
     if ((el = q('[data-quitar]'))) { var k = el.dataset.quitar; if (k === 'mes') st.det.mes = 'todo'; else st.det[k] = ''; st.detN = 60; render(); return; }
     if ((el = q('[data-sug]'))) { preguntar(el.dataset.sug); return; }
