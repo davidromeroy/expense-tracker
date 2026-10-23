@@ -1,0 +1,1687 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<!-- viewport-fit=cover: sin esto, en la app instalada la página no usa el área bajo la
+     barra de estado y la isla dinámica, y los márgenes de zona segura (env(safe-area-inset-*),
+     abajo en :root) quedan en cero. Con `black-translucent` el contenido SÍ pasa por debajo
+     de la barra de estado, así que los dos van juntos. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Finanzas</title>
+<!-- Agregado a la pantalla de inicio de iOS como si fuera una app: estos
+     meta tags sacan la barra de Safari al abrir desde el ícono (modo
+     standalone) y le dan color al status bar / a la barra de tareas de
+     Android. No cambian nada en un navegador normal — inofensivos ahí. -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Finanzas" />
+<meta name="theme-color" content="#0d0f11" />
+<!-- Ícono de la pantalla de inicio. iOS lo toma al AGREGAR la página, no después: para
+     ver uno nuevo hay que quitarla de la pantalla de inicio y volver a agregarla. -->
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
+<link rel="icon" type="image/png" href="icons/icon-192.png" />
+<link rel="manifest" href="manifest.webmanifest" />
+<!-- Fuentes vendorizadas en fonts/ (ver fonts.css) — antes venían de
+     fonts.googleapis.com directo acá, un <link rel=stylesheet> que bloquea
+     el render: con mala señal (datos móviles por Tailscale, wifi débil) el
+     dashboard se quedaba en blanco esperando la fuente en vez de pintar los
+     datos que ya estaban listos. Reportado: "a veces tarda, a veces no
+     carga". Local, cero round-trip externo, consistente con el resto de
+     public/ (Chart.js ya estaba vendorizado; esto no lo estaba). -->
+<link rel="stylesheet" href="fonts.css">
+<!--
+  Sin Chart.js. Todos los gráficos de este dashboard son SVG generado a mano
+  desde los datos del API. Motivos, en orden de peso:
+    1. La Zero 2W tiene 512MB: cada KB de JS que no se carga es RAM que queda.
+    2. Ningún CDN externo, así que el dashboard abre igual sin internet
+       (la Pi sirve todo y los datos ya están en la SQLite local).
+    3. Gauges y mancuernas no existen en Chart.js igual: había que dibujarlas.
+  Si algún día hace falta zoom o pan, ahí sí conviene volver a una librería.
+-->
+<style>
+:root{
+  --bg:#f1f3f5; --card:#ffffff; --card-2:#f7f9fa; --sunk:#eef1f3;
+  --line:#e1e6ea; --line-2:#eef1f4;
+  /* --ink-2 / --ink-3 oscurecidos para cumplir contraste (WCAG AA 4,5:1) sobre fondo, card y
+     card-2: antes --ink-3 daba 2,77–3,08:1 en claro. --warn / --warn-lg: el ámbar de --s4
+     como TEXTO daba 1,95:1; --warn llega a 4,65:1 y --warn-lg a 3:1 para números grandes. */
+  --ink:#0f1419; --ink-2:#4a535b; --ink-3:#686e74;
+  --brand:#2a78d6; --brand-solid:#2976d3;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#4a3aa7; --s4:#eda100; --s5:#e87ba4; --mute:#a8afb5;
+  --warn:#936400; --warn-lg:#c28400;
+  --pos:#17915f; --neg:#d63a3f;
+  /* Zonas seguras del teléfono (barra de estado, isla dinámica, indicador de inicio).
+     En un navegador normal valen 0 y el layout queda como siempre. */
+  --sat:env(safe-area-inset-top,0px); --sar:env(safe-area-inset-right,0px);
+  --sab:env(safe-area-inset-bottom,0px); --sal:env(safe-area-inset-left,0px);
+  --shadow:0 1px 2px rgba(15,20,25,.05),0 4px 14px rgba(15,20,25,.05);
+  --dsp:"Archivo",-apple-system,BlinkMacSystemFont,sans-serif;
+  --ui:"Manrope",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0d0f11; --card:#16191c; --card-2:#1b1f23; --sunk:#121517;
+  --line:#252b30; --line-2:#1e2327;
+  --ink:#f2f5f7; --ink-2:#9aa3ab; --ink-3:#7f878e;
+  --brand:#3987e5; --brand-solid:#3277cb;
+  --s1:#3987e5; --s2:#d95926; --s3:#9085e9; --s4:#c98500; --s5:#d55181; --mute:#5c646b;
+  --warn:#c98500; --warn-lg:#c98500;
+  --pos:#1fae74; --neg:#e5484d;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.25);
+}}
+:root[data-theme="dark"]{
+  --bg:#0d0f11; --card:#16191c; --card-2:#1b1f23; --sunk:#121517;
+  --line:#252b30; --line-2:#1e2327;
+  --ink:#f2f5f7; --ink-2:#9aa3ab; --ink-3:#7f878e;
+  --brand:#3987e5; --brand-solid:#3277cb;
+  --s1:#3987e5; --s2:#d95926; --s3:#9085e9; --s4:#c98500; --s5:#d55181; --mute:#5c646b;
+  --warn:#c98500; --warn-lg:#c98500;
+  --pos:#1fae74; --neg:#e5484d;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+html{color-scheme:light dark;background:var(--bg);-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.app{max-width:900px;margin:0 auto;padding:max(24px,calc(var(--sat) + 10px)) max(16px,var(--sar)) max(44px,calc(var(--sab) + 16px)) max(16px,var(--sal))}
+
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.eyebrow button{font:inherit;letter-spacing:inherit;text-transform:inherit;background:none;border:0;color:var(--ink-3);cursor:pointer;padding:0;position:relative}
+.eyebrow button:hover{color:var(--ink)}
+.eyebrow button:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+
+.ledger{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.led{flex:1 1 158px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 15px 14px}
+.led dt{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin:0 0 7px}
+.led dd{margin:0;font-family:var(--dsp);font-weight:800;font-size:25px;letter-spacing:-.025em;line-height:1;font-variant-numeric:tabular-nums}
+.led dd span{font-size:.55em;font-weight:700;color:var(--ink-3)}
+.led p{margin:7px 0 0;font-family:var(--mono);font-size:11px;color:var(--ink-3);line-height:1.4}
+.led.in dd{color:var(--pos)} .led.out dd{color:var(--neg)} .led.inv dd{color:var(--s3)} .led.sal dd{color:var(--warn-lg)}
+.led.fon dd{color:var(--warn-lg)} .led.liq dd{color:var(--s1)}
+.led.pat{background:var(--card-2);border-color:var(--ink-3)}
+.led.tgl{cursor:pointer;transition:border-color .16s,background .16s}
+.led.tgl:hover{border-color:var(--ink-3)}
+.led.tgl:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.led dt .swap{font-style:normal;color:var(--ink-3);font-size:11px;margin-left:2px}
+.led.tgl:hover dt .swap{color:var(--brand)}
+.srcline{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);margin:10px 0 14px;line-height:1.7}
+.srcline b{color:var(--ink-2);font-weight:500}
+
+.chipbar{display:flex;gap:8px;overflow-x:auto;padding:3px 0 14px;margin-top:-1px;scrollbar-width:none}
+.chipbar::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;font-family:var(--ui);font-size:13px;font-weight:600;padding:9px 15px;min-height:40px;border-radius:999px;
+  border:1px solid var(--line);background:var(--card);color:var(--ink-2);cursor:pointer;
+  transition:background .18s,color .18s,border-color .18s;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.chip:hover{border-color:var(--ink-3);color:var(--ink)}
+.chip .dot{width:7px;height:7px;border-radius:50%;background:var(--mute)}
+.chip[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chip[aria-selected="true"] .dot{background:var(--bg)}
+.chip:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+
+.panel{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden;animation:in .22s ease}
+@keyframes in{from{opacity:.4;transform:translateY(4px)}to{opacity:1;transform:none}}
+.phead{display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:18px 20px 4px}
+.phead h2{font-family:var(--dsp);font-weight:700;font-size:19px;letter-spacing:-.015em;margin:0}
+.tag{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:4px 9px;border-radius:6px;background:var(--card-2);color:var(--ink-3);border:1px solid var(--line)}
+.tag.warn{color:var(--warn);border-color:var(--warn)}
+/* Para el mensaje de error de sync: `.tag` fuerza mayúsculas y va bien para
+   una etiqueta corta ("⚠ SIN ACTUALIZAR"), pero una oración completa del
+   error real (puede traer una ruta de archivo) en mayúsculas es ilegible. */
+.syncerr{display:block;margin-top:4px;font-family:var(--mono);font-size:11.5px;color:var(--warn);text-transform:none}
+
+.plot{padding:10px 20px 2px;overflow-x:auto;position:relative}
+.plot svg{display:block;width:100%;height:auto}
+.plot.wide svg{min-width:540px}
+
+.legend{display:flex;flex-wrap:wrap;gap:5px 16px;padding:10px 20px 0;font-family:var(--mono);font-size:11px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:9px;height:9px;border-radius:2px;flex:0 0 auto}
+.legend i.dot{border-radius:50%}
+
+.read{margin:16px 20px 20px;padding:13px 15px;background:var(--sunk);border-radius:11px;font-size:13.5px;color:var(--ink-2);line-height:1.55}
+.read b{color:var(--ink);font-weight:700}
+
+.tools{display:flex;align-items:center;gap:9px;padding:6px 20px 0;flex-wrap:wrap}
+.tools .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.seg{display:inline-flex;background:var(--card-2);border:1px solid var(--line);border-radius:9px;padding:3px}
+.seg button{font-family:var(--ui);font-weight:600;font-size:12.5px;padding:6px 13px;min-height:32px;border:0;background:transparent;color:var(--ink-3);cursor:pointer;border-radius:6px;transition:background .16s,color .16s}
+.seg button[aria-pressed="true"],.seg button[aria-checked="true"]{background:var(--brand-solid);color:#fff}
+.seg button:disabled{opacity:.4;cursor:not-allowed}
+.seg button:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+
+.tools.det select,.tools.det input[type="search"]{font-family:var(--ui);font-size:12.5px;font-weight:500;
+  padding:7px 11px;min-height:32px;border-radius:9px;border:1px solid var(--line);background:var(--card-2);
+  color:var(--ink);appearance:none}
+.tools.det select{padding-right:26px;
+  background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6"><path d="M1 1l4 4 4-4" fill="none" stroke="%238b949c" stroke-width="1.5"/></svg>');
+  background-repeat:no-repeat;background-position:right 9px center}
+.tools.det input[type="search"]{flex:1 1 160px;min-width:120px}
+.tools.det select:focus-visible,.tools.det input:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+th.ord{cursor:pointer;user-select:none;position:relative}
+th.ord::after{content:"";position:absolute;inset:-8px 0}
+th.ord:hover{color:var(--ink)}
+th.ord.on{color:var(--ink)}
+th.ord:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
+.detmsg{text-align:center!important;padding:22px 10px!important;color:var(--ink-3);font-size:13px;white-space:normal!important}
+
+.ask{display:flex;gap:9px;padding:16px 20px 0;align-items:flex-start}
+.ask textarea{flex:1;font-family:var(--ui);font-size:13.5px;color:var(--ink);background:var(--card-2);
+  border:1px solid var(--line);border-radius:10px;padding:9px 12px;resize:vertical;min-height:38px}
+.ask textarea:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+.ask button{font-family:var(--ui);font-weight:600;font-size:13px;padding:9px 16px;border-radius:9px;
+  border:1px solid var(--brand-solid);background:var(--brand-solid);color:#fff;cursor:pointer;white-space:nowrap;align-self:stretch}
+.ask button:disabled{opacity:.6;cursor:default}
+.ask button:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+#askHist{display:flex;flex-direction:column;gap:10px;padding:14px 20px 0}
+.qa{background:var(--sunk);border-radius:11px;padding:12px 14px}
+.qa .q{margin:0 0 6px;font-weight:700;font-size:13.5px;color:var(--ink)}
+.qa .a{font-size:13.5px;color:var(--ink-2);line-height:1.5}
+.qa .sql{display:block;margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--ink-3);
+  white-space:pre-wrap;word-break:break-word}
+
+.mesbar{display:flex;gap:6px;overflow-x:auto;padding:10px 20px 8px;margin-bottom:-6px;scrollbar-width:none}
+.mesbar::-webkit-scrollbar{display:none}
+.mchip{flex:0 0 auto;font-family:var(--ui);font-size:12px;font-weight:600;padding:6px 12px;min-height:32px;border-radius:8px;
+  border:1px solid var(--line);background:var(--card-2);color:var(--ink-3);cursor:pointer;transition:background .16s,color .16s,border-color .16s}
+.mchip:hover{color:var(--ink);border-color:var(--ink-3)}
+.mchip[aria-selected="true"]{background:var(--brand-solid);color:#fff;border-color:var(--brand-solid)}
+.mchip:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.sparkbar{cursor:pointer}
+
+.tip{position:absolute;top:14px;transform:translateX(-50%);background:var(--card-2);border:1px solid var(--line);
+  border-radius:10px;padding:9px 11px;box-shadow:var(--shadow);pointer-events:none;z-index:5;min-width:140px}
+.tip h4{margin:0 0 7px;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.tip .r{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;color:var(--ink-2);margin-top:3px}
+.tip .r i{width:8px;height:8px;border-radius:2px;flex:0 0 auto}
+.tip .r b{margin-left:auto;color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
+.hit{fill:transparent;cursor:crosshair}
+
+.gauges{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:14px 20px 0}
+.gauge{background:var(--card-2);border:1px solid var(--line);border-radius:13px;padding:14px 10px 15px;text-align:center}
+.gauge svg{width:118px;height:118px;margin:0 auto;display:block}
+.gauge .gv{font-family:var(--dsp);font-weight:800;font-size:25px;letter-spacing:-.02em;fill:var(--ink)}
+.gauge .gs{font-family:var(--mono);font-size:10.5px;fill:var(--ink-2)}
+.gauge p{margin:8px 0 0;font-size:12.5px;color:var(--ink-2);line-height:1.35}
+.gauge p b{color:var(--ink);font-weight:700}
+
+.split{display:grid;grid-template-columns:minmax(190px,242px) 1fr;gap:18px;padding:12px 20px 0;align-items:center}
+@media (max-width:600px){.split{grid-template-columns:1fr}}
+.split svg{width:100%;height:auto;max-width:242px;margin:0 auto;display:block}
+.dcv{font-family:var(--dsp);font-weight:800;font-size:25px;letter-spacing:-.025em;fill:var(--ink)}
+.dcl{font-family:var(--mono);font-size:9.5px;fill:var(--ink-3);letter-spacing:.08em}
+.catlist{display:flex;flex-direction:column}
+.catlist .row{display:grid;grid-template-columns:11px 1fr auto auto;gap:10px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--line-2);font-size:13px}
+.catlist .row:last-child{border-bottom:0}
+.catlist .sw{width:11px;height:11px;border-radius:3px;align-self:center}
+.catlist .nm{color:var(--ink-2)}
+.catlist .amt{font-family:var(--dsp);font-weight:700;font-size:13.5px;color:var(--ink);font-variant-numeric:tabular-nums}
+.catlist .pct{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.catlist .row.sub{opacity:.72;font-size:12px}
+/* Filas y porciones que abren el detalle de gastos de esa categoría */
+.catlist .row[data-seg],.catlist .row[data-cat]{cursor:pointer;border-radius:6px;transition:background .15s}
+.catlist .row[data-seg]:hover,.catlist .row[data-cat]:hover{background:var(--card-2)}
+.catlist .row[data-seg]:focus-visible,.catlist .row[data-cat]:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+.split circle[data-seg]{cursor:pointer;transition:opacity .15s}
+.split circle[data-seg]:hover{opacity:.8}
+.split circle[data-seg]:focus-visible{outline:none;opacity:.8}
+.catlist .row.sub .nm::before{content:"└ ";color:var(--ink-3)}
+
+.specs{display:grid;grid-template-columns:repeat(auto-fit,minmax(228px,1fr));gap:0 26px;padding:16px 20px 0}
+.specs div{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line-2)}
+.specs dt{font-size:13px;color:var(--ink-2)}
+.specs dd{margin:0;font-family:var(--dsp);font-weight:700;font-size:14.5px;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.specs dd em{font-style:normal;font-family:var(--ui);font-weight:500;font-size:12px;color:var(--ink-3)}
+
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+.tablewrap{overflow-x:auto;padding:6px 20px 0}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line-2);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left;padding-left:0;white-space:normal}
+td:last-child,th:last-child{padding-right:0}
+thead th{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:500;border-bottom:1px solid var(--line)}
+td.num{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums}
+tbody tr:last-child td{border-bottom:none}
+/* Nota (Detalle): antes nowrap, empujaba la tabla a un scroll horizontal
+   larguísimo con una sola nota ocupando media pantalla de ancho. Ahora
+   envuelve en varias líneas, ancho acotado, letra más chica y atenuada —
+   es contexto de apoyo, no el dato principal de la fila. */
+td.nota{white-space:normal;text-align:left;max-width:220px;font-size:11.5px;color:var(--ink-2);line-height:1.4}
+@media (max-width:520px){ td.nota{max-width:150px} }
+
+.state{padding:44px 20px;text-align:center;color:var(--ink-2)}
+.state h2{font-family:var(--dsp);font-size:18px;margin:0 0 8px;color:var(--ink)}
+.state p{margin:0 auto;max-width:46ch;font-size:13.5px}
+.state code{font-family:var(--mono);font-size:12px}
+.state button{margin-top:16px;font-family:var(--ui);font-weight:600;font-size:13px;padding:9px 18px;border-radius:9px;border:1px solid var(--brand-solid);background:var(--brand-solid);color:#fff;cursor:pointer}
+.state button:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+.spin{width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--brand);border-radius:50%;margin:0 auto 14px;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+svg text{font-family:var(--mono);fill:var(--ink-2)}
+.ax{font-size:10px;fill:var(--ink-3)}
+.val{font-size:11px;fill:var(--ink);font-weight:500}
+.rowlab{font-family:var(--ui);font-size:11.5px;font-weight:600;fill:var(--ink-2)}
+.hdr{font-size:9px;fill:var(--ink-3);letter-spacing:.13em}
+.note{font-size:9.5px;fill:var(--ink-3)}
+.grid{stroke:var(--line);stroke-width:1}
+.zero{stroke:var(--ink-3);stroke-width:1}
+.ring{stroke:var(--card);stroke-width:2}
+[hidden]{display:none!important}
+/* ---- zona de toque de 44 px (guía de Apple) sin cambiar el tamaño que se ve ----
+   Se agranda con un pseudo-elemento invisible: el chip o botón se ve igual. Los márgenes de
+   .chipbar y .mesbar ya reservan ese aire (por eso .mesbar compensa con margin-bottom). */
+.chip,.mchip,.seg button{position:relative}
+.chip::after{content:"";position:absolute;inset:-3px 0}
+.mchip::after{content:"";position:absolute;inset:-7px -2px}
+.seg button::after{content:"";position:absolute;inset:-6px 0}
+.eyebrow button::after{content:"";position:absolute;inset:-15px -10px}
+/* Respuesta al tocar: sin esto, quitar el destello gris de iOS dejaría los botones mudos. */
+.chip:active,.mchip:active,.seg button:active,.eyebrow button:active{opacity:.65}
+/* En pantalla táctil los campos de Detalle y la caja de Preguntas llegan a 44 px y a 16 px de
+   letra: con menos, iOS hace zoom solo al enfocar el campo y la página queda ampliada. */
+@media (pointer:coarse){
+  .tools.det select,.tools.det input[type="search"]{min-height:44px;font-size:16px}
+  .ask textarea{font-size:16px;min-height:44px}
+}
+/* ---- modal: gastos de una categoría ---- */
+.modal{padding:0;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--ink);
+  width:min(560px,calc(100vw - 24px));max-height:min(80vh,680px);box-shadow:0 24px 60px rgba(0,0,0,.45)}
+.modal[open]{display:flex;flex-direction:column}
+.modal::backdrop{background:rgba(0,0,0,.58)}
+html.modal-abierto{overflow:hidden}
+.mhead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 20px 14px;border-bottom:1px solid var(--line)}
+.mhead h2{margin:0;font-family:var(--dsp);font-weight:700;font-size:19px;letter-spacing:-.015em}
+.mhead .msub{margin:4px 0 0;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.mclose{flex:0 0 auto;width:36px;height:36px;border-radius:9px;border:1px solid var(--line);background:var(--card-2);color:var(--ink-2);
+  font-size:20px;line-height:1;cursor:pointer}
+.mclose:hover{color:var(--ink);border-color:var(--ink-3)}
+.mclose:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.mbody{overflow-y:auto;padding:2px 20px}
+.mrow{display:grid;grid-template-columns:76px 1fr auto;gap:12px;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--line-2);font-size:13px}
+.mrow:last-child{border-bottom:0}
+.mrow .mf{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.mrow .md{color:var(--ink-2);min-width:0;overflow-wrap:anywhere}
+.mrow .md small{display:block;margin-top:2px;font-size:11.5px;color:var(--ink-3)}
+.mrow .mm{font-family:var(--dsp);font-weight:700;font-size:13.5px;color:var(--ink);font-variant-numeric:tabular-nums;text-align:right}
+.mrow .unica{display:inline-block;margin-left:6px;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  padding:2px 6px;border-radius:5px;color:var(--warn);border:1px solid var(--warn);vertical-align:1px}
+.mfoot{display:flex;justify-content:space-between;gap:12px;padding:13px 20px 16px;border-top:1px solid var(--line);font-size:13px;color:var(--ink-2)}
+.mfoot b{font-family:var(--dsp);color:var(--ink);font-variant-numeric:tabular-nums}
+.mmsg{margin:0;padding:26px 0;text-align:center;color:var(--ink-3);font-size:13px}
+.mrow .sn{font-style:normal;color:var(--ink-3)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:520px){
+  .app{padding:max(20px,calc(var(--sat) + 10px)) max(12px,var(--sar)) max(40px,calc(var(--sab) + 16px)) max(12px,var(--sal))}
+  .plot{padding:10px 12px 2px}
+  .phead,.legend,.tools,.gauges,.specs,.split,.mesbar,.tablewrap{padding-left:12px;padding-right:12px}
+  .read{margin-left:12px;margin-right:12px}
+  /* 11 px con el tracking de escritorio (.16em) empujaba "Sincronizar" a una 2.ª línea: se afloja solo acá */
+  .eyebrow{letter-spacing:.09em}
+}
+/* Métodos: lista única */
+.met-list{display:flex;flex-direction:column;gap:14px;margin:14px 0 4px;padding:0 12px}
+.met-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.met-nom{font-size:14px;font-weight:600;color:var(--ink)}
+.met-val{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.met-val small{font-size:11px;font-weight:500;color:var(--ink-2)}
+.met-bar{height:8px;border-radius:4px;background:var(--line);margin:6px 0 5px;overflow:hidden}
+.met-bar i{display:block;height:100%;border-radius:4px}
+.met-sub{font-size:11px;color:var(--ink-2)}
+/* Semana: cifra grande, barras por día y detalle */
+.met-list.sem{padding:0 20px}
+.shero{padding:14px 20px 0}
+.slbl{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.snum{font-family:var(--dsp);font-weight:700;font-size:40px;letter-spacing:-.02em;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums;margin:2px 0 4px}
+.sdl{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;min-height:20px}
+.sdelta{font-size:13px;color:var(--ink-2)}
+.sdelta.baja,.sdelta.sube{font-family:var(--mono);font-weight:600;font-size:12.5px}
+.sdelta.baja{color:var(--pos)}
+.sdelta.sube{color:var(--neg)}
+.sdias{display:flex;gap:6px;padding:18px 20px 4px;align-items:flex-end}
+.sdia{flex:1 1 0;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0}
+.sval{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;height:14px;white-space:nowrap}
+.sbar{display:flex;align-items:flex-end;width:100%;max-width:34px;height:110px;border-bottom:1px solid var(--line)}
+.sbar i{display:block;width:100%;background:var(--brand);border-radius:5px 5px 0 0}
+.sbar i.futuro{height:100%;background:none;border:1px dashed var(--line);border-bottom:0;border-radius:5px 5px 0 0;opacity:.7}
+.sbar.cero i{height:0}
+.sdn{font-size:11px;font-weight:600;color:var(--ink-2)}
+.sdatos{margin:12px 20px 0;background:var(--card-2);border-radius:10px;padding:8px 12px}
+.sfila{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:13px;color:var(--ink-2);padding:3px 0}
+.sfila b{color:var(--ink);font-family:var(--mono);font-variant-numeric:tabular-nums}
+.ssub{font-size:12px;color:var(--ink-3);padding:0 0 4px;overflow-wrap:anywhere}
+</style>
+</head>
+<body>
+<div class="app">
+  <p class="eyebrow">
+    <span>Finanzas · <span id="rango">—</span></span>
+    <button type="button" id="btnSync" title="Fuerza una sincronización contra el Google Sheet">↻ Sincronizar</button>
+  </p>
+
+  <dl class="ledger" id="ledger"></dl>
+  <p class="srcline" id="srcline">—</p>
+
+  <div class="chipbar" role="tablist" aria-label="Vistas" id="chipbar" hidden></div>
+
+  <div id="paneles">
+    <div class="panel"><div class="state"><div class="spin"></div><h2>Cargando</h2><p>Leyendo los datos de la Pi…</p></div></div>
+  </div>
+</div>
+
+<!-- Fuera de #paneles a propósito: pintarPanel() reescribe ese contenedor entero y se llevaría el diálogo puesto. -->
+<dialog id="catModal" class="modal" aria-labelledby="catModalTitulo"></dialog>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- formato ----------
+  // Ecuador usa dólar con coma decimal: Intl con 'es-EC' da $1.234,56.
+  // Esto es SOLO presentación. En el dato el separador es siempre el punto,
+  // que es lo único que SQLite entiende (ver comentario en sync.js).
+  var nf = new Intl.NumberFormat('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var nf0 = new Intl.NumberFormat('es-EC', { maximumFractionDigits: 0 });
+  function money(v) { return '$' + nf.format(Math.abs(v)); }
+  function money0(v) { return '$' + nf0.format(Math.round(Math.abs(v))); }
+  function signed(v) { return (v < 0 ? '−' : '+') + nf0.format(Math.round(Math.abs(v))); }
+  // Un decimal alcanza: "69,23%" sugiere una precisión que estos datos no
+  // tienen, y ocupa lugar en las etiquetas de los gráficos.
+  var nf1 = new Intl.NumberFormat('es-EC', { maximumFractionDigits: 1 });
+  function pct(v) { return nf1.format(v) + '%'; }
+
+  var MES_LARGO = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  var MES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  function nombreMes(ym, corto) {
+    var m = parseInt(ym.slice(5, 7), 10) - 1;
+    return (corto ? MES_CORTO : MES_LARGO)[m] || ym;
+  }
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  // "hace 3m" / "hace 2h" / "hace 5d" — para el aviso de última sincronización.
+  // Minutos y no timestamp exacto a propósito: es lo que hay que mirar de un
+  // vistazo para notar "esto dejó de actualizarse", sin hacer la resta a mano.
+  function haceTiempo(iso) {
+    if (!iso) return null;
+    var min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    if (min < 1) return 'recién';
+    if (min < 60) return 'hace ' + min + 'm';
+    var h = Math.floor(min / 60);
+    if (h < 48) return 'hace ' + h + 'h';
+    return 'hace ' + Math.floor(h / 24) + 'd';
+  }
+
+  var SERIE = ['--s1', '--s2', '--s3', '--s4', '--s5', '--mute'];
+  // El color sigue a la entidad, no a su posición en el ranking: si un filtro
+  // cambia el orden, "Efectivo" tiene que seguir siendo del mismo color.
+  var COLOR_METODO = {
+    'Transferencia Bancaria': '--s1',
+    'Efectivo': '--s2',
+    'Tarjeta de Crédito': '--s3',
+    'Tarjeta de Débito': '--s4',
+    'Aplicación Móvil': '--s5',
+    'ApplePay': '--mute'
+  };
+  function colorMetodo(m) { return COLOR_METODO[m] || '--mute'; }
+
+  var D = null;      // payload del API
+  var mesSel = -1;   // -1 = general
+  var catMes = -1;   // -1 = todo; mes elegido en Categorías (independiente de mesSel y detFiltro.mes)
+  var catBase = 'gasto'; // Categorías: el % se calcula sobre 'gasto' (suma 100%) o sobre 'ingreso' (no suma 100%)
+  var catSegs = [];      // porciones del anillo de Categorías tal como se pintaron; el clic las resuelve por índice
+  var metMes = -1;   // mes elegido en Métodos (-1 = todo)
+  var semSel = -1;   // semana elegida en Semana (-1 = la actual, la última)
+  var verFondo = false;     // tarjeta Invertido <-> Fondo de emergencia
+  var verLiquidez = false;  // tarjeta Neto <-> Liquidez
+
+  // ---------- helpers svg ----------
+  function svg(vb, contenido, aria) {
+    return '<svg viewBox="' + vb + '" role="img" aria-label="' + esc(aria) + '">' + contenido + '</svg>';
+  }
+  function ticksDe(max, n) {
+    var paso = Math.pow(10, Math.floor(Math.log10(max / n)));
+    var s = max / n / paso;
+    paso *= s > 5 ? 10 : s > 2 ? 5 : s > 1 ? 2 : 1;
+    var t = [], v = 0;
+    // El último tick tiene que quedar >= max, no solo <=. Antes el loop
+    // paraba apenas se pasaba de max, así que el ÚLTIMO tick push()eado
+    // podía quedar por debajo (ej. max=1206 con paso=500 daba techo=1000).
+    // Como el resto del código escala las barras contra ese techo
+    // (`tope = ticks[ticks.length-1]`), la barra más alta terminaba más
+    // alta que el área del gráfico y su etiqueta de valor se cortaba
+    // contra el borde del SVG. (Bug real, reportado en el panel Ingresos.)
+    while (v < max) { t.push(v); v += paso; }
+    t.push(v);
+    return t;
+  }
+  function gauge(pctVal, color, grande, sub, label, metaPct) {
+    var C = 326.73;
+    var dash = Math.max(0, Math.min(100, pctVal)) / 100 * C;
+    // Un dasharray de 0 con linecap="round" igual pinta un punto: el cap se
+    // dibuja aunque el segmento mida cero. En un mes con neto negativo eso
+    // dejaba una mancha de color flotando sobre el anillo.
+    var arco = dash < 0.6 ? '' :
+      '<circle cx="70" cy="70" r="52" fill="none" stroke="var(' + color + ')" stroke-width="12" stroke-linecap="round" stroke-dasharray="' + dash.toFixed(1) + ' ' + C + '" transform="rotate(-90 70 70)"/>';
+    // Marca de meta: una rayita radial en el punto del anillo donde cae
+    // `metaPct` (ej. 40%), para comparar de un vistazo sin hacer la cuenta.
+    // El anillo arranca en las 12 y avanza en sentido horario — mismo ángulo
+    // que usa stroke-dasharray, así la rayita cae exactamente donde debería.
+    var marca = '';
+    if (metaPct != null) {
+      var ang = (-90 + metaPct / 100 * 360) * Math.PI / 180;
+      var x1 = (70 + 43 * Math.cos(ang)).toFixed(1), y1 = (70 + 43 * Math.sin(ang)).toFixed(1);
+      var x2 = (70 + 61 * Math.cos(ang)).toFixed(1), y2 = (70 + 61 * Math.sin(ang)).toFixed(1);
+      marca = '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="var(--ink)" stroke-width="2"/>';
+    }
+    return '<div class="gauge">' + svg('0 0 140 140',
+      '<circle cx="70" cy="70" r="52" fill="none" stroke="var(--line)" stroke-width="12"/>' + arco + marca +
+      '<text class="gv" x="70" y="74" text-anchor="middle">' + grande + '</text>' +
+      '<text class="gs" x="70" y="92" text-anchor="middle">' + esc(sub) + '</text>',
+      label.replace(/<[^>]+>/g, ' ') + ' ' + grande) +
+      '<p>' + label + '</p></div>';
+  }
+  function gaugeVacio(titulo, chico) {
+    return '<div class="gauge">' + svg('0 0 140 140',
+      '<circle cx="70" cy="70" r="52" fill="none" stroke="var(--line)" stroke-width="12"/>' +
+      '<text class="gv" x="70" y="74" text-anchor="middle">—</text>' +
+      '<text class="gs" x="70" y="92" text-anchor="middle">' + esc(chico) + '</text>', 'Sin datos: ' + chico) +
+      '<p>' + titulo + '</p></div>';
+  }
+
+  // ---------- panel: resumen ----------
+  function panelResumen() {
+    var meses = D.porMes;
+    var d = mesSel < 0 ? D.general : meses[mesSel];
+    var enCurso = mesSel >= 0 && meses[mesSel].enCurso;
+    var titulo = mesSel < 0 ? 'Resumen general' : 'Resumen de ' + cap(nombreMes(meses[mesSel].mes));
+
+    var chips = '<button class="mchip" data-m="-1" role="tab" aria-selected="' + (mesSel < 0) + '">General</button>' +
+      meses.map(function (m, i) {
+        return '<button class="mchip" data-m="' + i + '" role="tab" aria-selected="' + (mesSel === i) + '">' +
+          cap(nombreMes(m.mes, true)) + '</button>';
+      }).join('');
+
+    // sparkline de gasto por mes: contexto + selector
+    var maxG = Math.max.apply(null, meses.map(function (m) { return m.gas; })) || 1;
+    var n = meses.length, plotW = 700, slot = plotW / n, bw = Math.min(46, slot - 8);
+    var barras = meses.map(function (m, i) {
+      var h = Math.max(3, m.gas / maxG * 62), y = 78 - h;
+      var x = 40 + i * slot + (slot - bw) / 2, cx = x + bw / 2;
+      var on = i === mesSel, todos = mesSel < 0;
+      var fill = m.enCurso ? 'url(#rayas)' : (on || todos ? 'var(--brand)' : 'var(--mute)');
+      return '<rect class="sparkbar" data-i="' + i + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) +
+        '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="4" fill="' + fill + '" opacity="' + (on || todos ? 1 : .5) + '"' +
+        (m.enCurso ? ' stroke="var(--mute)" stroke-width="1"' : '') + '><title>' + nombreMes(m.mes, true) + ': ' + money0(m.gas) + '</title></rect>' +
+        '<text class="ax" x="' + cx.toFixed(1) + '" y="98" text-anchor="middle"' + (on ? ' fill="var(--ink)"' : '') + '>' + nombreMes(m.mes, true) + '</text>' +
+        (on ? '<text class="val" x="' + cx.toFixed(1) + '" y="' + (y - 5).toFixed(1) + '" text-anchor="middle">' + money0(m.gas) + '</text>' : '');
+    }).join('');
+
+    var spark = '<div class="plot">' + svg('0 0 760 108',
+      '<defs><pattern id="rayas" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">' +
+      '<rect width="6" height="6" fill="var(--card)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--mute)" stroke-width="3"/></pattern></defs>' +
+      '<text class="hdr" x="40" y="12">GASTO POR MES · TOCÁ UNA BARRA</text>' +
+      '<line class="grid" x1="40" y1="78" x2="740" y2="78"/>' + barras,
+      'Gasto por mes') + '</div>';
+
+    // gauges — a qué se va el sueldo, no qué método de pago usás más (eso ya
+    // está en la pestaña Métodos). Meta de referencia: menos del 40% del
+    // ingreso en gastos fijos — la marca en el anillo es ese 40%, y el color
+    // del arco pasa a rojo si te pasás.
+    var g;
+    if (d.ing > 0) {
+      var fijoColor = d.gasFijosPct <= 40 ? '--pos' : '--neg';
+      g = gauge(d.gasFijosPct, fijoColor, pct(d.gasFijosPct), money0(d.gasFijos),
+        '<b>Gastos fijos</b><br>de lo que entró · meta &lt;40%', 40);
+      g += gauge(d.tasa, '--s3', pct(d.tasa), money0(d.inv), '<b>Invertido</b><br>de lo que entró');
+      g += gauge(d.gasOtrosPct, '--s2', pct(d.gasOtrosPct), money0(d.gasOtros), '<b>Otros gastos</b><br>de lo que entró');
+    } else {
+      g = gaugeVacio('<b>Gastos fijos</b><br>de lo que entró', 'sin ingreso') +
+        gaugeVacio('<b>Invertido</b><br>de lo que entró', 'sin ingreso') +
+        gaugeVacio('<b>Otros gastos</b><br>de lo que entró', 'sin ingreso');
+    }
+
+    var filas = [
+      ['Ingresos', money(d.ing), ''],
+      ['Gastos', money(d.gas), '<em>· ' + d.n + ' mov</em>'],
+      ['Aportes a inversión', money(d.inv), ''],
+      ['Neto', (d.neto < 0 ? '−' : '') + money(d.neto), ''],
+      ['Gasto típico (mediana)', money(d.med), ''],
+      ['Promedio por mov.', money(d.prom), ''],
+      ['Categoría top', money0(d.topCatV), '<em>· ' + esc(d.topCat) + ' ' + pct(d.topCatPct) + '</em>'],
+      ['Método más usado', String(d.topMetNv), '<em>mov · ' + esc(d.topMetN) + '</em>'],
+      ['Mayor movimiento', money0(d.bigV), '<em>· ' + esc(String(d.big).slice(0, 26)) + '</em>']
+    ];
+
+    var lectura;
+    if (mesSel < 0) {
+      var mc = D.general.mesMasCaro, mb = D.general.mesMasBarato;
+      lectura = '<b>De cada $100 que entraron, gastaste ' + Math.round(d.gas / d.ing * 100) +
+        ' e invertiste ' + Math.round(d.inv / d.ing * 100) + '.</b> Tu gasto típico es ' + money(d.med) +
+        ' pero el promedio es ' + money(d.prom) + ': la diferencia son las compras grandes.' +
+        (mc ? ' El mes más caro fue ' + nombreMes(mc.mes) + ' (' + money0(mc.gas) + ') y el más barato ' +
+          nombreMes(mb.mes) + ' (' + money0(mb.gas) + ').' : '') +
+        (d.gasFijosPct <= 40
+          ? ' Tus gastos fijos son ' + pct(d.gasFijosPct) + ' del ingreso: dentro de la meta de &lt;40%.'
+          : ' <b>Tus gastos fijos son ' + pct(d.gasFijosPct) + ' del ingreso, por encima de la meta de 40%.</b>');
+    } else if (enCurso) {
+      lectura = '<b>Mes en curso.</b> Todavía no cerró, así que no lo compares con los meses completos ' +
+        'y no cuenta para «mes más caro» ni para los promedios.';
+    } else {
+      lectura = '<b>' + cap(nombreMes(meses[mesSel].mes)) + ':</b> ' + d.n + ' movimientos de gasto por ' +
+        money(d.gas) + ', con mediana de ' + money(d.med) + '. Lo más grande fue ' + esc(d.big) + ' (' + money0(d.bigV) + '), ' +
+        'y el ' + pct(d.topCatPct) + ' del mes se fue en ' + esc(d.topCat) + '. ' +
+        (d.neto < 0 ? 'Cerraste en rojo: ' + money(d.neto) + '.' : 'Te quedaron ' + money(d.neto) + '.');
+    }
+
+    return '<section class="panel">' +
+      '<div class="phead"><h2>' + titulo + '</h2><span class="tag' + (enCurso ? ' warn' : '') + '">' +
+        (enCurso ? 'mes en curso' : (mesSel < 0 ? meses.length + ' meses · ' + d.n + ' gastos' : d.n + ' gastos')) + '</span></div>' +
+      '<div class="mesbar" role="tablist" aria-label="Período">' + chips + '</div>' +
+      spark +
+      '<div class="gauges">' + g + '</div>' +
+      '<dl class="specs">' + filas.map(function (f) {
+        return '<div><dt>' + f[0] + '</dt><dd>' + f[1] + ' ' + f[2] + '</dd></div>';
+      }).join('') + '</dl>' +
+      '<div class="read">' + lectura + '</div></section>';
+  }
+
+  // ---------- panel: categorías ----------
+  function panelCategorias() {
+    var meses = D.porMes;
+    // Si el sync cambia la cantidad de meses, el índice guardado puede quedar fuera de rango.
+    if (catMes >= meses.length) catMes = -1;
+    var mes = catMes < 0 ? null : meses[catMes];
+    var cats = mes ? mes.porCategoria : D.porCategoria;
+    var total = cats.reduce(function (a, c) { return a + c.total; }, 0);
+    var nMov = cats.reduce(function (a, c) { return a + c.n; }, 0);
+    var ambito = mes ? cap(nombreMes(mes.mes)) : 'todo el período';
+
+    var chips = '<button class="mchip" data-cm="-1" role="tab" aria-selected="' + (catMes < 0) + '">Todo</button>' +
+      meses.map(function (m, i) {
+        return '<button class="mchip" data-cm="' + i + '" role="tab" aria-selected="' + (catMes === i) + '">' +
+          cap(nombreMes(m.mes, true)) + '</button>';
+      }).join('');
+    var barra = '<div class="mesbar" role="tablist" aria-label="Período">' + chips + '</div>';
+
+    // Un mes puede traer ingresos pero ningún gasto: sin esto el anillo divide por cero.
+    if (!total) {
+      catSegs = [];
+      return '<section class="panel">' +
+        '<div class="phead"><h2>En qué se va el gasto</h2><span class="tag">' + esc(ambito) + '</span></div>' +
+        barra +
+        '<div class="read"><b>Sin gastos en ' + esc(ambito) + '.</b> Elegí otro período para ver el desglose.</div></section>';
+    }
+
+    // Base del porcentaje. Sobre los gastos suma 100%. Sobre los ingresos responde
+    // "de lo que entró, ¿cuánto se fue en cada categoría?" y NO suma 100%: lo que
+    // falta es lo que sobró (y si gastaste más de lo que entró, se pasa de 100%).
+    var ing = mes ? mes.ing : D.general.ing;
+    var hayIngreso = ing > 0;
+    var sobreIngreso = catBase === 'ingreso' && hayIngreso;
+    var base = sobreIngreso ? ing : total;
+    var restante = ing - total;
+
+    var selBase = '<div class="tools"><span class="lbl">Porcentaje sobre</span>' +
+      '<div class="seg" role="radiogroup" aria-label="Base del porcentaje">' +
+      '<button type="button" role="radio" data-cbase="gasto" aria-checked="' + !sobreIngreso + '">Mis gastos</button>' +
+      '<button type="button" role="radio" data-cbase="ingreso" aria-checked="' + sobreIngreso + '"' +
+        (hayIngreso ? '' : ' disabled title="Sin ingresos registrados en este período"') + '>Mis ingresos</button>' +
+      '</div></div>';
+
+    // Más de 6 porciones y los ángulos chicos dejan de distinguirse: la cola
+    // se agrupa en "Otras" y se desglosa en la lista de al lado.
+    var VIS = 5;
+    var visibles = cats.slice(0, VIS);
+    var cola = cats.slice(VIS);
+    var colaTotal = cola.reduce(function (a, c) { return a + c.total; }, 0);
+    // `cats` son las categorías reales que agrupa cada porción: las que abre el modal.
+    var segs = visibles.map(function (c, i) { return { nom: c.categoria, v: c.total, color: SERIE[i], cats: [c.categoria] }; });
+    if (cola.length) {
+      segs.push({ nom: 'Otras ' + cola.length, v: colaTotal, color: '--mute',
+        cats: cola.map(function (c) { return c.categoria; }) });
+    }
+    catSegs = segs;
+
+    // Sobre ingresos el anillo representa el ingreso entero: lo no gastado se dibuja
+    // como "Restante". Si gastaste de más no hay restante y el anillo se llena con
+    // el gasto (los porcentajes de la lista pasan de 100%).
+    var arcos = segs.slice();
+    if (sobreIngreso && restante > 0) arcos.push({ nom: 'Restante', v: restante, color: '--pos' });
+    var baseAnillo = sobreIngreso ? Math.max(ing, total) : total;
+
+    var C = 2 * Math.PI * 70, off = 0;
+    // Las porciones de categoría (no el "Restante") abren el modal con sus gastos.
+    var anillo = arcos.map(function (s, i) {
+      var largo = s.v / baseAnillo * C;
+      var abre = i < segs.length
+        ? ' data-seg="' + i + '" role="button" tabindex="0" aria-label="Ver los gastos de ' + esc(s.nom) + ': ' + money(s.v) + '"'
+        : '';
+      var d = '<circle cx="110" cy="110" r="70" stroke="var(' + s.color + ')" stroke-dasharray="' +
+        Math.max(0, largo - 2.5).toFixed(1) + ' ' + C.toFixed(1) + '" stroke-dashoffset="' + (-off).toFixed(1) + '"' + abre + '/>';
+      off += largo;
+      return d;
+    }).join('');
+
+    var lista = segs.map(function (s, i) {
+      return '<div class="row" data-seg="' + i + '" role="button" tabindex="0">' +
+        '<span class="sw" style="background:var(' + s.color + ')"></span>' +
+        '<span class="nm">' + esc(s.nom) + '</span><span class="amt">' + money(s.v) + '</span>' +
+        '<span class="pct">' + pct(s.v / base * 100) + '</span></div>';
+    }).join('') + cola.map(function (c) {
+      return '<div class="row sub" data-cat="' + esc(c.categoria) + '" role="button" tabindex="0"><span></span>' +
+        '<span class="nm">' + esc(c.categoria) + '</span>' +
+        '<span class="amt">' + money(c.total) + '</span><span class="pct">' + pct(c.total / base * 100) + '</span></div>';
+    }).join('') + (sobreIngreso && restante > 0
+      ? '<div class="row"><span class="sw" style="background:var(--pos)"></span><span class="nm">Restante</span>' +
+        '<span class="amt">' + money(restante) + '</span><span class="pct">' + pct(restante / ing * 100) + '</span></div>'
+      : '');
+
+    var centroV = sobreIngreso ? pct(total / ing * 100) : money0(total);
+    var centroL = sobreIngreso ? 'DEL INGRESO' : nMov + ' MOV';
+
+    var top = cats[0];
+    var unica = top && top.unico > 0;
+    var nota;
+    if (sobreIngreso) {
+      var gastado = total / ing * 100;
+      nota = restante >= 0
+        ? '<b>De tus ' + money0(ing) + ' de ingreso (' + esc(ambito) + ') gastaste ' + pct(gastado) + ', o sea ' + money0(total) +
+          '.</b> Te quedaron ' + money0(restante) + '.'
+        : '<b>Gastaste más de lo que ingresó (' + esc(ambito) + '):</b> ' + money0(total) + ' contra ' + money0(ing) +
+          ' de ingreso, ' + pct(gastado) + '. Te pasaste por ' + money0(-restante) + '.';
+      if (unica) {
+        nota += ' <b>Ojo:</b> ' + money(top.unico) + ' de «' + esc(top.categoria) + '» son compras únicas de más de ' +
+          money0(D.corteCompraGrande) + ' que no se repiten todos los meses.';
+      }
+      // Si el sueldo todavía no entró, casi todo parece gasto de más: se avisa en pantalla.
+      if (mes && mes.enCurso) nota += ' El mes sigue en curso: si el ingreso todavía no entró completo, el porcentaje se ve inflado.';
+    } else if (unica) {
+      nota = '<b>Ojo con leer «' + esc(top.categoria) + ' ' + pct(top.total / total * 100) + '» como gasto corriente:</b> ' +
+        money(top.unico) + ' de esos ' + money(top.total) + ' son compras únicas de más de ' + money0(D.corteCompraGrande) +
+        ' que no se repiten todos los meses.';
+    } else {
+      nota = '<b>' + (mes ? 'En ' + esc(ambito) + ' hubo ' : 'Tus ') + cats.length + ' categorías, ordenadas por peso.</b> El anillo dibuja las ' + segs.length +
+        ' principales; el resto se agrupa para que los ángulos chicos sigan siendo legibles.';
+    }
+    // Eligió "Mis ingresos" y este período no tiene: se muestra sobre gastos, y se dice.
+    if (catBase === 'ingreso' && !hayIngreso) {
+      nota = '<b>Sin ingresos registrados en ' + esc(ambito) + ':</b> se muestra el porcentaje sobre tus gastos. ' + nota;
+    }
+
+    return '<section class="panel">' +
+      '<div class="phead"><h2>En qué se va el gasto</h2><span class="tag">' +
+        (mes ? esc(ambito) + (mes.enCurso ? ' · en curso' : '') + ' · ' : '') + cats.length + ' categorías</span></div>' +
+      barra + selBase +
+      '<div class="split">' + svg('0 0 220 220',
+        '<g transform="rotate(-90 110 110)" fill="none" stroke-width="26">' + anillo + '</g>' +
+        '<text class="dcv" x="110" y="110" text-anchor="middle">' + centroV + '</text>' +
+        '<text class="dcl" x="110" y="128" text-anchor="middle">' + centroL + '</text>',
+        sobreIngreso ? 'Gasto por categoría como porcentaje del ingreso' : 'Gasto por categoría') +
+      '<div class="catlist">' + lista + '</div></div>' +
+      '<div class="read">' + nota + '</div></section>';
+  }
+
+  // ---------- modal: gastos de una categoría ----------
+  var modalSeq = 0; // si llega otro clic antes de que responda el server, gana el último
+
+  // `nombres` son las categorías reales a listar: una sola, o varias si es la porción "Otras".
+  function abrirModalCategoria(nombres, titulo) {
+    var dlg = document.getElementById('catModal');
+    var mes = catMes < 0 ? null : D.porMes[catMes];
+    var ambito = mes ? cap(nombreMes(mes.mes)) : 'Todo el período';
+    var multiples = nombres.length > 1;
+    var seq = ++modalSeq;
+
+    function cabecera(sub) {
+      return '<div class="mhead"><div><h2 id="catModalTitulo">' + esc(titulo) + '</h2>' +
+        '<p class="msub">' + esc(sub) + '</p></div>' +
+        '<button type="button" class="mclose" data-cerrar aria-label="Cerrar">×</button></div>';
+    }
+
+    dlg.innerHTML = cabecera(ambito) + '<div class="mbody"><p class="mmsg">Cargando…</p></div>';
+    if (!dlg.open) {
+      dlg.showModal();
+      document.documentElement.classList.add('modal-abierto');
+    }
+
+    var q = Object.assign(rangoDeMes(catMes), { tipo: 'Gasto' });
+    if (!multiples) q.categoria = nombres[0];
+    fetch('api/gastos?' + new URLSearchParams(q).toString())
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (rows) {
+        if (seq !== modalSeq) return;
+        var filas = multiples ? rows.filter(function (r) { return nombres.indexOf(r.categoria) >= 0; }) : rows;
+        var total = filas.reduce(function (a, r) { return a + r.monto; }, 0);
+        var cuerpo = filas.length ? filas.map(function (r) {
+          var principal = r.nota ? esc(r.nota) : (multiples ? esc(r.categoria) : '<em class="sn">Sin nota</em>');
+          var sec = [multiples && r.nota ? esc(r.categoria) : '', esc(r.metodo_pago || '—')].filter(Boolean).join(' · ');
+          // Misma regla que la nota "Ojo con leer…" del panel: compra grande, no gasto corriente.
+          var unica = r.monto >= D.corteCompraGrande ? '<span class="unica">única</span>' : '';
+          return '<div class="mrow"><span class="mf">' + esc(r.fecha) + '</span>' +
+            '<span class="md">' + principal + unica + '<small>' + sec + '</small></span>' +
+            '<span class="mm">' + money(r.monto) + '</span></div>';
+        }).join('') : '<p class="mmsg">No hay gastos en este período.</p>';
+        dlg.innerHTML = cabecera(ambito + ' · ' + filas.length + (filas.length === 1 ? ' gasto' : ' gastos')) +
+          '<div class="mbody">' + cuerpo + '</div>' +
+          '<div class="mfoot"><span>Total</span><b>' + money(total) + '</b></div>';
+      })
+      .catch(function (err) {
+        if (seq !== modalSeq) return;
+        dlg.innerHTML = cabecera(ambito) + '<div class="mbody"><p class="mmsg">No se pudo cargar: ' + esc(err.message) + '</p></div>';
+      });
+  }
+
+  (function () {
+    var dlg = document.getElementById('catModal');
+    // Clic en el fondo (el <dialog> mismo, no su contenido) o en la ×. Escape ya lo cierra el navegador.
+    dlg.addEventListener('click', function (e) {
+      if (e.target === dlg || e.target.closest('[data-cerrar]')) dlg.close();
+    });
+    dlg.addEventListener('close', function () { document.documentElement.classList.remove('modal-abierto'); });
+  })();
+
+  // ---------- panel: métodos ----------
+  // Una sola lista (no dos gráficos): barra = dólares, y al lado cuánto pesa en cantidad y el
+  // ticket promedio. Los dos rankings se contradicen y esa es la lectura: tiene que verse en la misma fila.
+  function metodosDe(mes) {
+    var src = mes ? mes.metodos : null;
+    var lista = src
+      ? Object.keys(src).map(function (k) { return { metodo: k, total: src[k].total, n: src[k].n }; })
+      : D.porMetodo.map(function (m) { return { metodo: m.metodo, total: m.total, n: m.n }; });
+    return lista.map(function (m) { m.ticket = m.n ? m.total / m.n : 0; return m; })
+      .sort(function (a, b) { return b.total - a.total; });
+  }
+
+  function panelMetodos() {
+    var meses = D.metodosMes;
+    if (metMes >= meses.length) metMes = -1;
+    var mes = metMes < 0 ? null : meses[metMes];
+    var ms = metodosDe(mes);
+    var ambito = mes ? cap(nombreMes(mes.mes)) : 'todo el período';
+    var chips = '<button class="mchip" data-mm="-1" role="tab" aria-selected="' + (metMes < 0) + '">Todo</button>' +
+      meses.map(function (m, i) {
+        return '<button class="mchip" data-mm="' + i + '" role="tab" aria-selected="' + (metMes === i) + '">' +
+          cap(nombreMes(m.mes, true)) + '</button>';
+      }).join('');
+    var barra = '<div class="mesbar" role="tablist" aria-label="Período">' + chips + '</div>';
+
+    var totalV = ms.reduce(function (a, m) { return a + m.total; }, 0);
+    var totalN = ms.reduce(function (a, m) { return a + m.n; }, 0);
+    if (!totalV) {
+      return '<section class="panel"><div class="phead"><h2>Con qué pagás</h2><span class="tag">' + esc(ambito) + '</span></div>' +
+        barra + '<div class="read">Sin gastos en ' + esc(ambito) + '.</div></section>';
+    }
+    var maxV = ms[0].total;
+
+    var filas = ms.map(function (m) {
+      var c = colorMetodo(m.metodo);
+      return '<div class="met-row">' +
+        '<div class="met-top"><span class="met-nom">' + esc(m.metodo.replace('Tarjeta de ', 'T. ')) + '</span>' +
+        '<span class="met-val">' + money0(m.total) + ' <small>' + pct(m.total / totalV * 100) + '</small></span></div>' +
+        '<div class="met-bar"><i style="width:' + Math.max(1.5, m.total / maxV * 100).toFixed(1) + '%;background:var(' + c + ')"></i></div>' +
+        '<div class="met-sub">' + m.n + ' mov. · ' + pct(m.n / totalN * 100) + ' de la cantidad · ticket ' + money(m.ticket) + '</div></div>';
+    }).join('');
+
+    var porFrec = ms.slice().sort(function (a, b) { return b.n - a.n; })[0];
+    var porPlata = ms[0];
+    var lectura = porPlata.metodo === porFrec.metodo
+      ? '<b>' + esc(porPlata.metodo) + ' manda en las dos medidas:</b> ' + pct(porPlata.total / totalV * 100) +
+        ' de los dólares y ' + pct(porPlata.n / totalN * 100) + ' de los movimientos.'
+      : '<b>Dos respuestas opuestas.</b> En dólares manda ' + esc(porPlata.metodo) + ' (' + pct(porPlata.total / totalV * 100) +
+        '), en cantidad ' + esc(porFrec.metodo) + ' (' + pct(porFrec.n / totalN * 100) + '). Ticket: ' + money(porPlata.ticket) +
+        ' contra ' + money(porFrec.ticket) + ': uno es el canal de las cosas grandes, el otro tu día a día.';
+
+    return '<section class="panel">' +
+      '<div class="phead"><h2>Con qué pagás</h2><span class="tag">' + esc(ambito) + '</span></div>' +
+      barra + '<div class="met-list">' + filas + '</div><div class="read">' + lectura + '</div></section>';
+  }
+
+  // ---------- panel: neto mensual ----------
+  function panelNeto() {
+    var ms = D.porMes;
+    var vals = ms.map(function (m) { return m.neto; });
+    var maxP = Math.max(0, Math.max.apply(null, vals));
+    var minN = Math.min(0, Math.min.apply(null, vals));
+    var rango = (maxP - minN) || 1;
+    var top = 36, alto = 170, esc0 = alto / rango, y0 = top + maxP * esc0;
+    var n = ms.length, plotW = 670, slot = plotW / n, bw = Math.min(44, slot - 10);
+
+    var barras = ms.map(function (m, i) {
+      var h = Math.abs(m.neto) * esc0, y = m.neto >= 0 ? y0 - h : y0;
+      var x = 70 + i * slot + (slot - bw) / 2, cx = x + bw / 2;
+      var color = m.neto >= 0 ? '--pos' : '--neg';
+      return '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) +
+        '" height="' + Math.max(2, h).toFixed(1) + '" rx="4" fill="var(' + color + ')"' + (m.enCurso ? ' opacity=".55"' : '') + '>' +
+        '<title>' + nombreMes(m.mes) + ': ' + signed(m.neto) + '</title></rect>' +
+        '<text class="val" x="' + cx.toFixed(1) + '" y="' + (m.neto >= 0 ? y - 6 : y + h + 14).toFixed(1) +
+        '" text-anchor="middle"' + (m.neto < 0 ? ' fill="var(--neg)"' : '') + '>' + signed(m.neto) + '</text>' +
+        '<text class="ax" x="' + cx.toFixed(1) + '" y="' + (top + alto + 32) + '" text-anchor="middle">' +
+        nombreMes(m.mes, true) + (m.enCurso ? '*' : '') + '</text>';
+    }).join('');
+
+    var rojos = ms.filter(function (m) { return m.neto < 0 && !m.enCurso; });
+    var mejor = ms.filter(function (m) { return !m.enCurso; })
+      .reduce(function (a, m) { return !a || m.neto > a.neto ? m : a; }, null);
+    var lectura = rojos.length
+      ? '<b>' + (rojos.length === 1 ? 'Un mes en rojo' : rojos.length + ' meses en rojo') + ':</b> ' +
+        rojos.map(function (m) { return nombreMes(m.mes) + ' (' + signed(m.neto) + ', mayor gasto: ' + esc(m.big) + ')'; }).join(' y ') +
+        '. Tu mejor mes fue ' + nombreMes(mejor.mes) + ' con ' + signed(mejor.neto) + '. ' +
+        '<b>Inversión y Ahorro no entran acá</b> — no son gasto, es plata que cambia de bolsillo.'
+      : '<b>Ningún mes en rojo.</b> El mejor fue ' + nombreMes(mejor.mes) + ' con ' + signed(mejor.neto) + '.';
+
+    return '<section class="panel">' +
+      '<div class="phead"><h2>Meses en verde y meses en rojo</h2><span class="tag">ingresos − gastos</span></div>' +
+      '<div class="plot wide">' + svg('0 0 760 ' + (top + alto + 48),
+        '<line class="grid" x1="70" y1="' + top + '" x2="740" y2="' + top + '"/>' +
+        '<text class="ax" x="62" y="' + (top + 4) + '" text-anchor="end">' + signed(maxP) + '</text>' +
+        barras +
+        '<line class="zero" x1="70" y1="' + y0.toFixed(1) + '" x2="740" y2="' + y0.toFixed(1) + '"/>' +
+        (ms.some(function (m) { return m.enCurso; })
+          ? '<text class="note" x="70" y="' + (top + alto + 46) + '">* mes en curso, todavía no cerró</text>' : ''),
+        'Neto mensual') + '</div>' +
+      '<div class="legend"><span><i style="background:var(--pos)"></i>Neto positivo</span>' +
+      '<span><i style="background:var(--neg)"></i>Neto negativo</span></div>' +
+      '<div class="read">' + lectura + '</div></section>';
+  }
+
+  // ---------- panel: ingresos ----------
+  function panelIngresos() {
+    var ms = D.porMes;
+    var max = Math.max.apply(null, ms.map(function (m) { return m.ing; })) || 1;
+    var ticks = ticksDe(max, 3), tope = ticks[ticks.length - 1];
+    var top = 40, alto = 150;
+    var n = ms.length, plotW = 670, slot = plotW / n, bw = Math.min(46, slot - 10);
+
+    var ejes = ticks.map(function (t) {
+      var y = top + alto - t / tope * alto;
+      return '<line class="grid" x1="70" y1="' + y.toFixed(1) + '" x2="740" y2="' + y.toFixed(1) + '"/>' +
+        '<text class="ax" x="62" y="' + (y + 4).toFixed(1) + '" text-anchor="end">' + money0(t) + '</text>';
+    }).join('');
+
+    var barras = ms.map(function (m, i) {
+      var h = m.ing / tope * alto, y = top + alto - h;
+      var x = 70 + i * slot + (slot - bw) / 2, cx = x + bw / 2;
+      return '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) +
+        '" height="' + Math.max(2, h).toFixed(1) + '" rx="4" fill="var(--pos)"' + (m.enCurso ? ' opacity=".55"' : '') + '>' +
+        '<title>' + nombreMes(m.mes) + ': ' + money(m.ing) + '</title></rect>' +
+        (m.ing > 0 ? '<text class="val" x="' + cx.toFixed(1) + '" y="' + (y - 6).toFixed(1) + '" text-anchor="middle">' + nf0.format(Math.round(m.ing)) + '</text>' : '') +
+        '<text class="ax" x="' + cx.toFixed(1) + '" y="' + (top + alto + 22) + '" text-anchor="middle">' +
+        nombreMes(m.mes, true) + (m.enCurso ? '*' : '') + '</text>';
+    }).join('');
+
+    var cerrados = ms.filter(function (m) { return !m.enCurso && m.ing > 0; });
+    var prom = cerrados.reduce(function (a, m) { return a + m.ing; }, 0) / (cerrados.length || 1);
+    var mayor = cerrados.reduce(function (a, m) { return !a || m.ing > a.ing ? m : a; }, null);
+    var menor = cerrados.reduce(function (a, m) { return !a || m.ing < a.ing ? m : a; }, null);
+
+    return '<section class="panel">' +
+      '<div class="phead"><h2>De dónde entra la plata</h2><span class="tag">' + money0(D.general.ing) + ' en total</span></div>' +
+      '<div class="plot wide">' + svg('0 0 760 ' + (top + alto + 40), ejes + barras +
+        (ms.some(function (m) { return m.enCurso; })
+          ? '<text class="note" x="70" y="' + (top + alto + 38) + '">* mes en curso, todavía no entró todo</text>' : ''),
+        'Ingreso por mes') + '</div>' +
+      '<div class="read"><b>Tu ingreso mensual promedio es ' + money(prom) + '</b> sobre ' + cerrados.length +
+      ' meses cerrados, pero va de ' + money0(menor.ing) + ' (' + nombreMes(menor.mes) + ') a ' + money0(mayor.ing) +
+      ' (' + nombreMes(mayor.mes) + '). Con esa variación, un presupuesto mensual fijo te va a fallar: conviene calcularlo sobre el piso, no sobre el promedio.</div></section>';
+  }
+
+  // ---------- panel: inversiones ----------
+  function panelInversiones() {
+    var iv = D.invMes;
+    if (!iv.length || iv[iv.length - 1].acumulado === 0) {
+      return '<section class="panel"><div class="state"><h2>Todavía no hay inversiones</h2>' +
+        '<p>Cuando registres un movimiento con <code>tipo = Inversión</code> en el Sheet, este panel se llena solo.</p></div></section>';
+    }
+    var max = Math.max.apply(null, iv.map(function (m) { return m.acumulado; }));
+    var ticks = ticksDe(max, 4), tope = ticks[ticks.length - 1];
+    var top = 40, alto = 150, n = iv.length;
+    var paso = n > 1 ? 670 / (n - 1) : 0;
+    var px = function (i) { return 70 + i * paso; };
+    var py = function (v) { return top + alto - v / tope * alto; };
+
+    var ejes = ticks.map(function (t) {
+      var y = py(t);
+      return '<line class="grid" x1="70" y1="' + y.toFixed(1) + '" x2="740" y2="' + y.toFixed(1) + '"/>' +
+        '<text class="ax" x="62" y="' + (y + 4).toFixed(1) + '" text-anchor="end">' + money0(t) + '</text>';
+    }).join('');
+
+    var pts = iv.map(function (m, i) { return px(i).toFixed(1) + ',' + py(m.acumulado).toFixed(1); });
+    var area = 'M' + pts.join(' L') + ' L' + px(n - 1).toFixed(1) + ',' + (top + alto) + ' L70,' + (top + alto) + ' Z';
+    var puntos = iv.map(function (m, i) {
+      return '<circle cx="' + px(i).toFixed(1) + '" cy="' + py(m.acumulado).toFixed(1) + '" r="' +
+        (i === n - 1 ? 5.5 : 4) + '" fill="var(--s3)" class="ring"><title>' + nombreMes(m.mes) +
+        ': ' + money(m.acumulado) + (m.aporte ? ' (aporte ' + money(m.aporte) + ')' : ' (sin aporte)') + '</title></circle>' +
+        '<text class="ax" x="' + px(i).toFixed(1) + '" y="' + (top + alto + 22) + '" text-anchor="middle">' +
+        nombreMes(m.mes, true) + '</text>';
+    }).join('');
+
+    var cerrados = iv.filter(function (m) { return !m.enCurso; });
+    var sinAporte = cerrados.filter(function (m) { return m.aporte === 0; });
+    var ultimo = iv[n - 1];
+
+    return '<section class="panel">' +
+      '<div class="phead"><h2>Cuánto llevas invertido</h2><span class="tag">' + money0(ultimo.acumulado) + '</span></div>' +
+      '<div class="plot wide">' + svg('0 0 760 ' + (top + alto + 40),
+        '<defs><linearGradient id="gInv" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0%" stop-color="var(--s3)" stop-opacity=".28"/>' +
+        '<stop offset="100%" stop-color="var(--s3)" stop-opacity="0"/></linearGradient></defs>' +
+        ejes + '<path d="' + area + '" fill="url(#gInv)"/>' +
+        '<polyline fill="none" stroke="var(--s3)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" points="' + pts.join(' ') + '"/>' +
+        puntos + '<text class="val" x="740" y="' + (py(ultimo.acumulado) - 10).toFixed(1) + '" text-anchor="end">' + money0(ultimo.acumulado) + '</text>',
+        'Inversión acumulada por mes') + '</div>' +
+      '<div class="read"><b>Llevás ' + money(ultimo.acumulado) + ' invertidos</b> en ' +
+      cerrados.filter(function (m) { return m.aporte > 0; }).length + ' meses con aporte. ' +
+      (sinAporte.length
+        ? 'Meses sin aportar: ' + sinAporte.map(function (m) { return nombreMes(m.mes); }).join(', ') + '.'
+        : 'No fallaste ningún mes cerrado.') +
+      ' Tu tasa de inversión sobre lo que entra es del ' + pct(D.general.tasa) + '.</div></section>';
+  }
+
+  // ---------- panel: patrimonio ----------
+  function panelPatrimonio() {
+    var p = D.patrimonio, g = D.general;
+    if (!p.disponible) {
+      // Sin la hoja Saldos no hay saldo real de cuenta que mostrar, pero SÍ
+      // hay algo mejor que la pantalla vacía de antes: el mismo desglose que
+      // ya arma la cabecera (Invertido/Fondo/Liquidez), listado junto en vez
+      // de repartido en dos tarjetas que alternan.
+      var invertido = D.invMes.length ? D.invMes[D.invMes.length - 1].acumulado : 0;
+      var total = g.patrimonioTotalMov || 1;
+      var partes = [
+        { nm: 'Invertido', v: invertido, c: '--s3' },
+        { nm: 'Fondo de emergencia', v: g.fondoEmergenciaTotal, c: '--s4' },
+        { nm: 'Liquidez (banco / efectivo)', v: g.liquidez, c: '--s1' }
+      ];
+      var filas = partes.map(function (x) {
+        return '<div class="row"><span class="sw" style="background:var(' + x.c + ')"></span>' +
+          '<span class="nm">' + esc(x.nm) + '</span><span class="amt">' + money(x.v) + '</span>' +
+          '<span class="pct">' + pct(x.v / total * 100) + '</span></div>';
+      }).join('');
+      return '<section class="panel">' +
+        '<div class="phead"><h2>Cuánto tenés, y dónde está</h2><span class="tag">' + money0(g.patrimonioTotalMov) + '</span></div>' +
+        '<div class="catlist" style="padding:16px 20px 0">' + filas + '</div>' +
+        '<div class="read"><b>Esto es un cálculo, no tu saldo real de cuenta.</b> Invertido y Fondo de emergencia suman lo que ' +
+        'registraste como movimiento (más la semilla que cargaste a mano) — si tu inversión ganó rentabilidad, o algún gasto no se ' +
+        'registró, este número no lo sabe. Creá una hoja <code>Saldos</code> (<code>fecha | cuenta | saldo</code>) en el Sheet para ' +
+        'reemplazar esta aproximación por tu saldo real, cargado a mano cuando quieras actualizar la foto.</div></section>';
+    }
+    var ing = D.general.ing, gas = D.general.gas;
+    var pico = p.inicial + ing;
+    var top = 40, alto = 150, esc0 = alto / pico;
+    var yb = top + alto;
+    var barras = [
+      { lab: 'tenías', sub: p.fechaApertura, v: p.inicial, y: yb - p.inicial * esc0, h: p.inicial * esc0, c: '--mute', txt: money0(p.inicial) },
+      { lab: 'ingresos', sub: 'entró', v: ing, y: top, h: ing * esc0, c: '--pos', txt: '+' + money0(ing) },
+      { lab: 'gastos', sub: 'salió', v: gas, y: top, h: gas * esc0, c: '--neg', txt: '−' + money0(gas) },
+      { lab: 'tenés hoy', sub: 'patrimonio', v: p.total, y: yb - p.total * esc0, h: p.total * esc0, c: '--ink-3', txt: money0(p.total) }
+    ];
+    var slot = 660 / 4, bw = Math.min(88, slot - 20);
+    var cascada = barras.map(function (b, i) {
+      var x = 80 + i * slot + (slot - bw) / 2, cx = x + bw / 2;
+      return '<rect x="' + x.toFixed(1) + '" y="' + b.y.toFixed(1) + '" width="' + bw.toFixed(1) +
+        '" height="' + Math.max(2, b.h).toFixed(1) + '" rx="4" fill="var(' + b.c + ')"/>' +
+        '<text class="val" x="' + cx.toFixed(1) + '" y="' + (b.y - 6).toFixed(1) + '" text-anchor="middle"' +
+        (b.c === '--pos' || b.c === '--neg' ? ' fill="var(' + b.c + ')"' : '') + '>' + b.txt + '</text>' +
+        '<text class="ax" x="' + cx.toFixed(1) + '" y="' + (yb + 20) + '" text-anchor="middle">' + b.lab + '</text>' +
+        '<text class="note" x="' + cx.toFixed(1) + '" y="' + (yb + 34) + '" text-anchor="middle">' + esc(b.sub) + '</text>';
+    }).join('');
+
+    var comp = p.cuentas.slice().sort(function (a, b) { return b.saldo - a.saldo; });
+    comp.unshift({ cuenta: 'Liquidez (derivado)', saldo: p.liquidez });
+    var totalComp = comp.reduce(function (a, c) { return a + c.saldo; }, 0) || 1;
+    var ancho = 720 - (comp.length - 1) * 2, xs = 20;
+    var tira = comp.map(function (c, i) {
+      var w = c.saldo / totalComp * ancho, x = xs;
+      xs += w + 2;
+      var color = i === 0 ? '--pos' : SERIE[(i + 2) % SERIE.length];
+      var cx = x + w / 2;
+      var anchor = cx > 690 ? 'end' : cx < 70 ? 'start' : 'middle';
+      var tx = anchor === 'end' ? 756 : anchor === 'start' ? 20 : cx;
+      return '<rect x="' + x.toFixed(1) + '" y="26" width="' + Math.max(3, w).toFixed(1) + '" height="26" rx="5" fill="var(' + color + ')"/>' +
+        '<text class="rowlab" x="' + tx.toFixed(1) + '" y="72" text-anchor="' + anchor + '">' + esc(c.cuenta) + '</text>' +
+        '<text class="val" x="' + tx.toFixed(1) + '" y="90" text-anchor="' + anchor + '">' + money(c.saldo) + ' · ' + pct(c.saldo / totalComp * 100) + '</text>';
+    }).join('');
+
+    var meses = D.general.gas / D.porMes.filter(function (m) { return !m.enCurso; }).length;
+
+    return '<section class="panel">' +
+      '<div class="phead"><h2>Cuánto tenés, y dónde está</h2><span class="tag">' + money0(p.total) + '</span></div>' +
+      '<div class="plot wide">' + svg('0 0 760 ' + (yb + 44),
+        '<line class="grid" x1="80" y1="' + yb + '" x2="740" y2="' + yb + '"/>' +
+        '<text class="ax" x="72" y="' + (yb + 4) + '" text-anchor="end">$0</text>' + cascada,
+        'Cascada del patrimonio') + '</div>' +
+      '<div class="plot">' + svg('0 0 760 104',
+        '<text class="hdr" x="20" y="16">DÓNDE ESTÁN ESOS ' + money(p.total).toUpperCase() + '</text>' + tira,
+        'Composición del patrimonio') + '</div>' +
+      '<div class="read"><b>Patrimonio = lo que tenías + ingresos − gastos.</b> No se le resta la inversión ni el fondo: ' +
+      'invertir no es gastar, es la misma plata cambiando de forma. Por eso ' + money(p.total) + ' no es lo mismo que ' +
+      'ingresos − gastos (' + money(ing - gas) + '), que es solo lo que <em>creciste</em> en estos meses.<br><br>' +
+      '<b>La liquidez es el número flojo:</b> sale de restar, así que arrastra cualquier gasto sin registrar. ' +
+      'Cargá el saldo real de tu cuenta en la hoja <code>Saldos</code>: si no da ' + money(p.liquidez) +
+      ', esa diferencia es exactamente lo que te falta anotar. Tu liquidez cubre ' + nf1.format(p.liquidez / meses) +
+      ' meses de gasto al ritmo actual.</div></section>';
+  }
+
+  // ---------- panel: semana ----------
+  // Semanas de lunes a domingo. Los cálculos vienen hechos del server
+  // (D.semanas, ver semana.js): acá solo se dibuja. HTML y no SVG para que el
+  // texto no se achique en el teléfono.
+  //
+  // No muestra ingresos ni neto a propósito: el sueldo es quincenal, así que
+  // una de cada dos semanas daría un neto negativo sin significar nada.
+  var DIAS_CORTO = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+  var DIAS_LARGO = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+  function diaMes(f) { return parseInt(f.slice(8, 10), 10) + ' ' + nombreMes(f.slice(0, 7), true); }
+  function rangoSemana(w) {
+    var a = parseInt(w.desde.slice(8, 10), 10), b = parseInt(w.hasta.slice(8, 10), 10);
+    return w.desde.slice(0, 7) === w.hasta.slice(0, 7)
+      ? a + '–' + b + ' ' + nombreMes(w.hasta.slice(0, 7), true)
+      : diaMes(w.desde) + ' – ' + diaMes(w.hasta);
+  }
+
+  function panelSemana() {
+    var ws = D.semanas || [];
+    if (!ws.length) return '<section class="panel"><div class="state"><h2>Sin datos de semanas</h2></div></section>';
+    if (semSel < 0 || semSel >= ws.length) semSel = ws.length - 1;
+    var w = ws[semSel];
+
+    var chips = ws.map(function (x, i) {
+      return '<button class="mchip" data-sm="' + i + '" role="tab" aria-selected="' + (i === semSel) + '">' +
+        rangoSemana(x) + (x.enCurso ? ' · en curso' : '') + '</button>';
+    }).join('');
+
+    // Comparación: la semana en curso se mide contra la anterior HASTA EL
+    // MISMO DÍA (w.previo ya viene recortado así). Flecha + palabra, no solo
+    // color: un número verde o rojo suelto no dice nada a quien no distingue
+    // los dos. Gastar menos es la dirección "buena".
+    var delta;
+    if (!w.previo.gasto) {
+      delta = '<span class="sdelta nd">Sin gastos en la semana anterior para comparar</span>';
+    } else {
+      var dif = (w.gasto - w.previo.gasto) / w.previo.gasto * 100;
+      if (Math.abs(dif) < 0.5) {
+        delta = '<span class="sdelta nd">≈ igual que la semana anterior</span>';
+      } else {
+        delta = '<span class="sdelta ' + (dif < 0 ? 'baja' : 'sube') + '">' + (dif < 0 ? '▼ ' : '▲ ') +
+          pct(Math.abs(dif)) + ' ' + (dif < 0 ? 'menos' : 'más') + '</span>' +
+          '<span class="sdelta nd">que la anterior (' + money0(w.previo.gasto) + ')</span>';
+      }
+    }
+
+    // Barras por día. Solo se rotula la más alta: un número en cada barra
+    // son siete cifras que compiten; el resto se lee por altura, y cada barra
+    // lleva su valor en el aria-label/title para quien lo quiera.
+    var maxDia = Math.max.apply(null, w.porDia.map(function (v) { return v || 0; })) || 1;
+    var iMax = w.porDia.indexOf(maxDia);
+    var dias = w.porDia.map(function (v, i) {
+      var fecha = new Date(Date.UTC(+w.desde.slice(0, 4), +w.desde.slice(5, 7) - 1, +w.desde.slice(8, 10) + i)).toISOString().slice(0, 10);
+      var etiqueta = cap(DIAS_LARGO[i]) + ' ' + diaMes(fecha) + (v === null ? ': todavía no llega' : ': ' + money(v));
+      var barra = v === null ? '<i class="futuro"></i>'
+        : '<i style="height:' + (v ? Math.max(3, v / maxDia * 100) : 0).toFixed(1) + '%"></i>';
+      return '<div class="sdia" role="img" aria-label="' + esc(etiqueta) + '" title="' + esc(etiqueta) + '">' +
+        '<span class="sval">' + (v && i === iMax ? money0(v) : '') + '</span>' +
+        '<span class="sbar' + (v === 0 ? ' cero' : '') + '">' + barra + '</span>' +
+        '<span class="sdn">' + DIAS_CORTO[i] + '</span></div>';
+    }).join('');
+
+    // Categorías: las 5 mayores; el resto se junta para que sume el total.
+    var top = w.categorias.slice(0, 5);
+    var resto = w.categorias.slice(5).reduce(function (a, c) { return a + c.total; }, 0);
+    var maxCat = top.length ? top[0].total : 1;
+    var cats = top.map(function (c) {
+      return '<div class="met-item"><div class="met-top"><span class="met-nom">' + esc(c.categoria) + '</span>' +
+        '<span class="met-val">' + money(c.total) + ' <small>' + pct(c.total / w.gasto * 100) + '</small></span></div>' +
+        '<div class="met-bar"><i style="width:' + (c.total / maxCat * 100).toFixed(1) + '%;background:var(--brand)"></i></div></div>';
+    }).join('') + (resto > 0
+      ? '<div class="met-item"><div class="met-top"><span class="met-nom">Otras categorías</span><span class="met-val">' +
+        money(resto) + ' <small>' + pct(resto / w.gasto * 100) + '</small></span></div></div>' : '');
+
+    var mayor = w.mayor
+      ? '<div class="sfila"><span>Gasto más grande</span><b>' + money(w.mayor.monto) + '</b></div>' +
+        '<div class="ssub">' + esc(w.mayor.categoria) + (w.mayor.nota ? ' · ' + esc(w.mayor.nota) : '') + ' · ' + diaMes(w.mayor.fecha) + '</div>'
+      : '';
+
+    var vacia = w.n === 0;
+    return '<section class="panel">' +
+      '<div class="phead"><h2>Tu semana</h2><span class="tag">' + rangoSemana(w) + (w.enCurso ? ' · en curso' : '') + '</span></div>' +
+      '<div class="mesbar" role="tablist" aria-label="Semana">' + chips + '</div>' +
+      '<div class="shero"><div class="slbl">Gastado' + (w.enCurso && w.dias < 7 ? ' en ' + w.dias + (w.dias === 1 ? ' día' : ' días') : '') + '</div>' +
+        '<div class="snum">' + money(w.gasto) + '</div><div class="sdl">' + (vacia ? '<span class="sdelta nd">Sin gastos registrados</span>' : delta) + '</div></div>' +
+      '<div class="sdias" role="group" aria-label="Gasto por día">' + dias + '</div>' +
+      (vacia ? '' :
+        '<div class="sdatos"><div class="sfila"><span>Movimientos</span><b>' + w.n + (w.n === 1 ? ' gasto' : ' gastos') + '</b></div>' + mayor + '</div>' +
+        '<div class="met-list sem">' + cats + '</div>') +
+      '<div class="read">Semanas de lunes a domingo.' +
+        (w.enCurso && w.dias < 7 ? ' La comparación usa solo los primeros ' + w.dias + (w.dias === 1 ? ' día' : ' días') + ' de la semana anterior, para que sea justa.' : '') +
+        ' No incluye ingresos: tu sueldo es quincenal y una semana suelta no lo refleja.</div></section>';
+  }
+
+  // ---------- panel: detalle (tabla filtrable) ----------
+  // A diferencia del resto de paneles, este no se deriva de `D` (que solo
+  // trae agregados) — pide filas crudas a /api/gastos, que ya existía y ya
+  // soportaba desde/hasta/categoria/metodo_pago/tipo por querystring. Cero
+  // endpoint nuevo. El resultado se cachea en `detFilas`; cambiar de filtro
+  // reconsulta al server, pero ordenar u escribir en el buscador de nota
+  // reordena/filtra en memoria sobre esa caché — no hay motivo para golpear
+  // la red por eso con ~200 filas.
+  var detFiltro = { mes: -1, tipo: 'Gasto', cat: '', metodo: '', q: '' };
+  var detOrden = { col: 'fecha', dir: 'desc' };
+  var detFilas = null;
+
+  function thOrd(col, label) {
+    var on = detOrden.col === col;
+    return '<th data-ord="' + col + '" class="ord' + (on ? ' on' : '') + '" tabindex="0" role="button" aria-sort="' +
+      (on ? (detOrden.dir === 'asc' ? 'ascending' : 'descending') : 'none') + '">' + esc(label) +
+      (on ? (detOrden.dir === 'asc' ? ' ↑' : ' ↓') : '') + '</th>';
+  }
+
+  function panelDetalle() {
+    var meses = D.porMes;
+    var mchips = '<button class="mchip" data-dm="-1" role="tab" aria-selected="' + (detFiltro.mes < 0) + '">Todo</button>' +
+      meses.map(function (m, i) {
+        return '<button class="mchip" data-dm="' + i + '" role="tab" aria-selected="' + (detFiltro.mes === i) + '">' +
+          cap(nombreMes(m.mes, true)) + '</button>';
+      }).join('');
+
+    var TIPOS = ['', 'Gasto', 'Ingreso', 'Ahorro', 'Inversión'];
+    var segTipo = '<div class="seg" role="tablist" aria-label="Tipo">' + TIPOS.map(function (t) {
+      return '<button type="button" data-dtipo="' + esc(t) + '" aria-pressed="' + (detFiltro.tipo === t) + '">' +
+        (t || 'Todos') + '</button>';
+    }).join('') + '</div>';
+
+    var catOpts = '<option value="">Categoría: todas</option>' + D.porCategoria.map(function (c) {
+      return '<option value="' + esc(c.categoria) + '"' + (detFiltro.cat === c.categoria ? ' selected' : '') + '>' + esc(c.categoria) + '</option>';
+    }).join('');
+    var metOpts = '<option value="">Método: todos</option>' + D.porMetodo.map(function (m) {
+      return '<option value="' + esc(m.metodo) + '"' + (detFiltro.metodo === m.metodo ? ' selected' : '') + '>' + esc(m.metodo) + '</option>';
+    }).join('');
+
+    return '<section class="panel">' +
+      '<div class="phead"><h2>Detalle</h2><span class="tag" id="detCount">—</span></div>' +
+      '<div class="mesbar" role="tablist" aria-label="Mes">' + mchips + '</div>' +
+      '<div class="tools det">' + segTipo +
+        '<select id="detCat" aria-label="Filtrar por categoría">' + catOpts + '</select>' +
+        '<select id="detMet" aria-label="Filtrar por método de pago">' + metOpts + '</select>' +
+        '<input type="search" id="detQ" placeholder="Buscar en nota…" value="' + esc(detFiltro.q) + '">' +
+      '</div>' +
+      '<div class="tablewrap"><table>' +
+        '<thead><tr>' + thOrd('fecha', 'Fecha') + thOrd('categoria', 'Categoría') +
+          '<th>Método</th><th>Nota</th>' + thOrd('monto', 'Monto') + '</tr></thead>' +
+        '<tbody id="detBody"><tr><td colspan="5" class="detmsg">Cargando…</td></tr></tbody>' +
+      '</table></div>' +
+      '<div class="read">Tocá el encabezado de <b>Fecha</b> o <b>Monto</b> para ordenar. El filtro de mes, tipo, categoría y ' +
+        'método se cruzan entre sí — todo lo de Alimentos en julio, por ejemplo.</div></section>';
+  }
+
+  // Rango de fechas para api/gastos del mes en la posición `i` de D.porMes
+  // (-1 = todo el período, sin límites). Lo comparten Detalle y el modal de Categorías.
+  function rangoDeMes(i) {
+    if (i < 0) return {};
+    var mes = D.porMes[i].mes; // 'YYYY-MM'
+    // '-31' como límite superior funciona aunque el mes tenga menos días: la
+    // comparación es de texto 'YYYY-MM-DD', y cualquier fecha real de ese
+    // mes ordena antes que '...-31' igual.
+    return { desde: mes + '-01', hasta: mes + '-31' };
+  }
+  function detRango() { return rangoDeMes(detFiltro.mes); }
+
+  function cargarDetalle() {
+    var body = document.getElementById('detBody');
+    if (!body) return; // se cambió de pestaña antes de que esto corriera
+    body.innerHTML = '<tr><td colspan="5" class="detmsg">Cargando…</td></tr>';
+    var q = Object.assign(detRango(), {});
+    if (detFiltro.tipo) q.tipo = detFiltro.tipo;
+    if (detFiltro.cat) q.categoria = detFiltro.cat;
+    if (detFiltro.metodo) q.metodo_pago = detFiltro.metodo;
+    fetch('api/gastos?' + new URLSearchParams(q).toString())
+      .then(function (r) { return r.json(); })
+      .then(function (rows) { detFilas = rows; pintarDetalle(); })
+      .catch(function (err) {
+        var b = document.getElementById('detBody');
+        if (b) b.innerHTML = '<tr><td colspan="5" class="detmsg">No se pudo cargar: ' + esc(err.message) + '</td></tr>';
+      });
+  }
+
+  function pintarDetalle() {
+    var body = document.getElementById('detBody'), count = document.getElementById('detCount');
+    if (!body || !detFilas) return;
+
+    var q = detFiltro.q.trim().toLowerCase();
+    var filas = q ? detFilas.filter(function (r) { return (r.nota || '').toLowerCase().indexOf(q) >= 0; }) : detFilas;
+
+    var ordenadas = filas.slice().sort(function (a, b) {
+      var av = a[detOrden.col], bv = b[detOrden.col];
+      if (detOrden.col === 'monto') { av = Number(av); bv = Number(bv); }
+      var c = av < bv ? -1 : av > bv ? 1 : 0;
+      return detOrden.dir === 'asc' ? c : -c;
+    });
+
+    if (count) {
+      var total = ordenadas.reduce(function (a, r) { return a + r.monto; }, 0);
+      count.textContent = ordenadas.length + (ordenadas.length === 1 ? ' movimiento' : ' movimientos') + ' · ' + money0(total);
+    }
+
+    body.innerHTML = ordenadas.length
+      ? ordenadas.map(function (r) {
+          return '<tr><td>' + esc(r.fecha) + '</td><td>' + esc(r.categoria) + '</td><td>' + esc(r.metodo_pago || '—') +
+            '</td><td class="nota">' + esc(r.nota || '') + '</td><td class="num">' + money(r.monto) + '</td></tr>';
+        }).join('')
+      : '<tr><td colspan="5" class="detmsg">Nada con estos filtros.</td></tr>';
+  }
+
+  function refrescarDetalle() { pintarPanel(); cargarDetalle(); }
+
+  function ordenarDetalle(col) {
+    detOrden.dir = detOrden.col === col && detOrden.dir === 'desc' ? 'asc' : 'desc';
+    detOrden.col = col;
+    pintarPanel();   // redibuja el header con la flecha en la columna correcta
+    pintarDetalle(); // reordena lo que ya está en memoria, sin pedirle nada al server
+  }
+
+  // ---------- panel: preguntas (chatbot, Fase 4) ----------
+  // Capa de lenguaje natural sobre /api/preguntar (chatbot.js, Gemini). No
+  // reemplaza los filtros de Detalle — es para preguntas que no calzan en
+  // un formulario fijo ("¿en qué mes gasté más en el último año?").
+  var preguntasHist = []; // [{pregunta, respuesta, sql}], solo en memoria, se pierde al recargar
+
+  function panelPreguntas() {
+    var hist = preguntasHist.map(function (h) {
+      return '<div class="qa"><p class="q">' + esc(h.pregunta) + '</p>' +
+        '<div class="a">' + esc(h.respuesta) + '</div></div>';
+    }).join('');
+
+    return '<section class="panel">' +
+      '<div class="phead"><h2>Preguntale a tus datos</h2><span class="tag">beta · Gemini</span></div>' +
+      '<div class="ask">' +
+        '<textarea id="askInput" rows="2" placeholder="¿Cuánto gasté en Alimentos en julio?"></textarea>' +
+        '<button type="button" id="askBtn">Preguntar</button>' +
+      '</div>' +
+      '<div id="askHist">' + hist + '</div>' +
+      '<div class="read">Esto traduce tu pregunta a una consulta de solo lectura contra tus movimientos reales y responde con el resultado — no es una IA que "sepa" tus finanzas de memoria, cada respuesta viene de una query fresca. No reemplaza los filtros de <b>Detalle</b>, es para lo que no entra en un formulario fijo.</div></section>';
+  }
+
+  function preguntar() {
+    var input = document.getElementById('askInput'), btn = document.getElementById('askBtn');
+    var pregunta = input.value.trim();
+    if (!pregunta) return;
+
+    btn.disabled = true; btn.textContent = 'Pensando…';
+    fetch('api/preguntar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pregunta: pregunta }),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        preguntasHist.unshift({
+          pregunta: pregunta,
+          respuesta: res.ok ? res.j.respuesta : ('Error: ' + (res.j.error || 'algo salió mal')),
+          sql: res.j.sql,
+        });
+        input.value = '';
+        pintarPanel();
+      })
+      .catch(function (err) {
+        preguntasHist.unshift({ pregunta: pregunta, respuesta: 'No se pudo conectar: ' + err.message });
+        pintarPanel();
+      })
+      .finally(function () {
+        // pintarPanel() ya reconstruyó el botón — este objeto quedó viejo,
+        // pero re-habilitarlo no hace daño y cubre el caso de error antes
+        // de que pintarPanel() corra.
+        btn.disabled = false; btn.textContent = 'Preguntar';
+      });
+  }
+
+  // ---------- render ----------
+  var PANELES = [
+    { id: 'resumen', nom: 'Resumen', fn: panelResumen },
+    { id: 'cats', nom: 'Categorías', fn: panelCategorias },
+    { id: 'metodos', nom: 'Métodos', fn: panelMetodos },
+    { id: 'neto', nom: 'Neto mensual', fn: panelNeto },
+    { id: 'ingresos', nom: 'Ingresos', fn: panelIngresos },
+    { id: 'inv', nom: 'Inversiones', fn: panelInversiones },
+    { id: 'pat', nom: 'Patrimonio', fn: panelPatrimonio },
+    { id: 'semana', nom: 'Semana', fn: panelSemana },
+    { id: 'detalle', nom: 'Detalle', fn: panelDetalle },
+    { id: 'preguntas', nom: 'Preguntas', fn: panelPreguntas }
+  ];
+  // El panel abierto vive en el hash SOLO para que un link explícito
+  // (#patrimonio) abra directo en esa vista. Deliberadamente NO se usa para
+  // decidir qué mostrar al cargar: si se leyera location.hash acá, cualquier
+  // hash que haya quedado pegado en la URL (el ícono de pantalla de inicio
+  // de iOS guarda la URL tal cual estaba al agregarlo; Safari restaura tabs
+  // con su último hash) hace que la app SIEMPRE abra en la última pestaña
+  // vista, no en Resumen. Reportado: el ícono quedó pegado en "Neto mensual"
+  // para siempre. Por eso el arranque es fijo en 'resumen' — un link con
+  // hash sigue funcionando porque `hashchange` (más abajo) lo agarra después
+  // del primer render.
+  var IDS = PANELES.map(function (p) { return p.id; });
+  function panelDeHash() {
+    var h = (location.hash || '').replace('#', '');
+    return IDS.indexOf(h) >= 0 ? h : 'resumen';
+  }
+  var activo = 'resumen';
+
+  function pintarChips() {
+    var bar = document.getElementById('chipbar');
+    bar.hidden = false;
+    bar.innerHTML = PANELES.map(function (p) {
+      return '<button class="chip" role="tab" data-p="' + p.id + '" aria-selected="' + (p.id === activo) + '">' +
+        '<span class="dot"></span>' + p.nom + '</button>';
+    }).join('');
+  }
+
+  function pintarPanel() {
+    var p = PANELES.filter(function (x) { return x.id === activo; })[0];
+    document.getElementById('paneles').innerHTML = p.fn();
+    conectar();
+  }
+
+  function pintarCabecera() {
+    var g = D.general, p = D.patrimonio;
+    var cards = [
+      { c: 'in', t: 'Ingresos', v: g.ing, s: D.porMes.length + ' meses' },
+      { c: 'out', t: 'Gastos', v: g.gas, s: g.n + ' movimientos' }
+    ];
+
+    // Invertido <-> Fondo de emergencia comparten tarjeta, click/tap alterna.
+    // Colores distintos (s3 morado / s4 ámbar) a propósito — con el mismo
+    // color no se notaba que habían cambiado de contenido al tocar.
+    cards.push(verFondo
+      ? { c: 'fon', t: 'Fondo de emergencia', v: g.fondoEmergenciaTotal, s: 'acumulado · tocá para ver invertido', tgl: 'fondo' }
+      : { c: 'inv', t: 'Invertido', v: D.invMes.length ? D.invMes[D.invMes.length - 1].acumulado : 0, s: 'acumulado · tocá para ver fondo', tgl: 'fondo' });
+
+    if (p.disponible) {
+      p.cuentas.forEach(function (c) {
+        if (!/invers/i.test(c.cuenta)) cards.push({ c: 'sal', t: c.cuenta, v: c.saldo, s: 'saldo al ' + c.fecha });
+      });
+      cards.push({ c: 'pat', t: 'Patrimonio hoy', v: p.total, s: 'todo lo que tenés' });
+    } else {
+      // Patrimonio <-> Liquidez comparten tarjeta. Patrimonio (antes decía
+      // "Neto") es semilla de enero + todo lo que entró y salió — tu
+      // riqueza total, plata en cualquier cuenta. Liquidez es esa misma
+      // plata MENOS lo que ya está en Invertido/Fondo — lo único que puede
+      // quedar en banco/efectivo. Reportado: mostrar acá el flujo puro
+      // (ingresos − gastos, sin semilla) confundía con patrimonio total —
+      // esa cuenta sigue viva en la pestaña "Neto mensual", que sí necesita
+      // el flujo puro por mes; acá no.
+      cards.push(verLiquidez
+        ? { c: 'liq', t: 'Liquidez', v: g.liquidez, s: 'patrimonio − invertido − fondo · tocá para ver patrimonio', tgl: 'liquidez' }
+        : { c: '', t: 'Patrimonio', v: g.patrimonioTotalMov, s: 'semilla + ingresos − gastos · tocá para ver liquidez', tgl: 'liquidez' });
+    }
+    document.getElementById('ledger').innerHTML = cards.map(function (k) {
+      var partes = nf.format(Math.abs(k.v)).split(',');
+      // El ícono ⇄ en el título es la señal de "esto se puede tocar para
+      // cambiar" — antes solo estaba en el subtítulo chico, y no se notaba.
+      return '<div class="led ' + k.c + (k.tgl ? ' tgl' : '') + '"' + (k.tgl ? ' data-tgl="' + k.tgl + '" tabindex="0" role="button"' : '') +
+        '><dt>' + esc(k.t) + (k.tgl ? ' <i class="swap" aria-hidden="true">⇄</i>' : '') + '</dt><dd>' + (k.v < 0 ? '−' : '') + '$' +
+        partes[0] + '<span>,' + partes[1] + '</span></dd><p>' + esc(k.s) + '</p></div>';
+    }).join('');
+
+    var ms = D.porMes;
+    document.getElementById('rango').textContent = ms.length
+      ? nombreMes(ms[0].mes) + ' a ' + nombreMes(ms[ms.length - 1].mes) + ' ' + ms[ms.length - 1].mes.slice(0, 4)
+      : 'sin datos';
+    var sync = D.sync || {};
+    // "Actualizado hace 2m" hablaba del momento en que el DASHBOARD respondió
+    // esta request, no de cuándo se sincronizó de verdad contra el Sheet — si
+    // el sync llevaba horas fallando en silencio, esa hora igual se veía
+    // fresca. Esto usa `sync.ultimoOk`, el timestamp real del último sync que
+    // terminó bien (ver /api/dashboard → campo `sync`).
+    var minDesdeOk = sync.ultimoOk ? (Date.now() - new Date(sync.ultimoOk).getTime()) / 60000 : Infinity;
+    var stale = minDesdeOk > (sync.intervaloMin || 15) * 3;
+
+    var linea = '<b>' + D.filas + ' movimientos</b> en la base · última sync ' +
+      (sync.ultimoOk ? haceTiempo(sync.ultimoOk) : '<b>nunca</b>') +
+      (D.patrimonio.disponible ? '' : ' · <b>sin hoja «Saldos»</b>: el patrimonio está deshabilitado');
+
+    if (stale) {
+      linea += ' · <span class="tag warn" style="margin-left:4px">⚠ sin actualizar ' + haceTiempo(sync.ultimoOk) + '</span>';
+    }
+    if (sync.ultimoError) {
+      linea += '<span class="syncerr">⚠ último intento de sync falló ' + haceTiempo(sync.ultimoErrorEn) +
+        ': ' + esc(sync.ultimoError) + '</span>';
+    }
+    document.getElementById('srcline').innerHTML = linea;
+  }
+
+  // ---------- interacción ----------
+  // Cambia de pestaña sin empujar una entrada nueva al historial del
+  // navegador. Antes esto era `location.hash = activo`, que sí la empuja —
+  // en el iPhone, deslizar la barra de meses (horizontal, pegada al borde
+  // izquierdo) dispara por error el gesto nativo "atrás" de iOS, y esa
+  // entrada de historial hacía que te devolviera a la pestaña anterior de
+  // la nada. replaceState actualiza la URL (el link con #hash sigue
+  // sirviendo para abrir una vista puntual) pero no arma pila de "atrás".
+  function irA(id) {
+    activo = id;
+    if (location.hash !== '#' + activo) history.replaceState(null, '', '#' + activo);
+    pintarChips(); pintarPanel();
+  }
+
+  // En el celular las barras de meses scrollean, y elegir un mes repinta el panel
+  // entero, que deja la barra otra vez en la posición cero: el mes elegido (justo
+  // los recientes, que quedan al final) se perdería fuera de pantalla. Se centra a
+  // mano con scrollLeft, no con scrollIntoView, que además movería la página en
+  // vertical.
+  function centrarChipElegido(selector) {
+    var sel = document.querySelector(selector + '[aria-selected="true"]');
+    if (!sel) return;
+    var barra = sel.parentNode, b = barra.getBoundingClientRect(), r = sel.getBoundingClientRect();
+    barra.scrollLeft += (r.left - b.left) - (b.width - r.width) / 2;
+  }
+
+  function conectar() {
+    var chips = [].slice.call(document.querySelectorAll('.chip'));
+    chips.forEach(function (c, i) {
+      c.addEventListener('click', function () { irA(c.dataset.p); });
+      c.addEventListener('keydown', function (e) {
+        var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+        if (!d) return;
+        e.preventDefault();
+        irA(chips[(i + d + chips.length) % chips.length].dataset.p);
+        document.querySelector('.chip[aria-selected="true"]').focus();
+      });
+    });
+
+    // [data-m] (Resumen) y [data-dm] (Detalle) son dos selectores de mes
+    // independientes que comparten la clase visual .mchip — sin el atributo
+    // en el selector, este bind pisaría el estado del otro panel (Resumen
+    // usa `mesSel`, Detalle usa `detFiltro.mes`; mezclarlos deja `mesSel`
+    // en NaN la primera vez que se toca un mes desde Detalle).
+    [].forEach.call(document.querySelectorAll('.mchip[data-m]'), function (c) {
+      c.addEventListener('click', function () { mesSel = Number(c.dataset.m); pintarPanel(); });
+    });
+    [].forEach.call(document.querySelectorAll('.mchip[data-mm]'), function (c) {
+      c.addEventListener('click', function () { metMes = Number(c.dataset.mm); pintarPanel(); });
+    });
+    [].forEach.call(document.querySelectorAll('.mchip[data-sm]'), function (c) {
+      c.addEventListener('click', function () { semSel = Number(c.dataset.sm); pintarPanel(); });
+    });
+    [].forEach.call(document.querySelectorAll('.mchip[data-cm]'), function (c) {
+      c.addEventListener('click', function () { catMes = Number(c.dataset.cm); pintarPanel(); });
+    });
+    // Porciones del anillo y filas del listado de Categorías: abren el modal de gastos.
+    [].forEach.call(document.querySelectorAll('.split [data-seg], .split [data-cat]'), function (el) {
+      function abrir() {
+        if (el.dataset.seg !== undefined) {
+          var s = catSegs[Number(el.dataset.seg)];
+          if (s) abrirModalCategoria(s.cats, s.cats.length > 1 ? s.nom + ' categorías' : s.nom);
+        } else {
+          abrirModalCategoria([el.dataset.cat], el.dataset.cat);
+        }
+      }
+      el.addEventListener('click', abrir);
+      el.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(); }
+      });
+    });
+    [].forEach.call(document.querySelectorAll('.seg button[data-cbase]'), function (b) {
+      b.addEventListener('click', function () { catBase = b.dataset.cbase; pintarPanel(); });
+    });
+    // Cada selector de mes usa su propio atributo (ver arriba), así que se centra
+    // cada uno por separado.
+    centrarChipElegido('.mchip[data-m]');   // Resumen
+    centrarChipElegido('.mchip[data-cm]');  // Categorías
+    centrarChipElegido('.mchip[data-mm]');  // Métodos
+    centrarChipElegido('.mchip[data-sm]');  // Semana
+    centrarChipElegido('.mchip[data-dm]');  // Detalle
+    [].forEach.call(document.querySelectorAll('.sparkbar'), function (r) {
+      r.addEventListener('click', function () { mesSel = Number(r.dataset.i); pintarPanel(); });
+    });
+
+
+    // ---- panel Detalle: filtros, orden, búsqueda ----
+    if (document.getElementById('detBody')) {
+      [].forEach.call(document.querySelectorAll('.mchip[data-dm]'), function (c) {
+        c.addEventListener('click', function () { detFiltro.mes = Number(c.dataset.dm); refrescarDetalle(); });
+      });
+      [].forEach.call(document.querySelectorAll('[data-dtipo]'), function (b) {
+        b.addEventListener('click', function () { detFiltro.tipo = b.dataset.dtipo; refrescarDetalle(); });
+      });
+      var selCat = document.getElementById('detCat');
+      if (selCat) selCat.addEventListener('change', function () { detFiltro.cat = selCat.value; refrescarDetalle(); });
+      var selMet = document.getElementById('detMet');
+      if (selMet) selMet.addEventListener('change', function () { detFiltro.metodo = selMet.value; refrescarDetalle(); });
+      var inpQ = document.getElementById('detQ');
+      if (inpQ) {
+        // A propósito NO pasa por pintarPanel() en cada tecla: eso reconstruye
+        // el <input> entero y le hace perder el foco a media palabra. Solo
+        // filtra en memoria y repinta el <tbody>.
+        inpQ.addEventListener('input', function () { detFiltro.q = inpQ.value; pintarDetalle(); });
+      }
+      [].forEach.call(document.querySelectorAll('[data-ord]'), function (th) {
+        th.addEventListener('click', function () { ordenarDetalle(th.dataset.ord); });
+        th.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ordenarDetalle(th.dataset.ord); }
+        });
+      });
+      if (!detFilas) cargarDetalle();
+    }
+
+    // ---- panel Preguntas ----
+    var askBtn = document.getElementById('askBtn');
+    if (askBtn) {
+      askBtn.addEventListener('click', preguntar);
+      document.getElementById('askInput').addEventListener('keydown', function (e) {
+        // Enter envía, Shift+Enter hace salto de línea (textarea normal).
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); preguntar(); }
+      });
+    }
+  }
+
+  // ---------- carga ----------
+  function errorPanel(titulo, detalle) {
+    document.getElementById('paneles').innerHTML =
+      '<div class="panel"><div class="state"><h2>' + esc(titulo) + '</h2><p>' + detalle +
+      '</p><button type="button" id="reintentar">Reintentar</button></div></div>';
+    // OJO: `cargar` recibe `intento` como primer parámetro — pasarla
+    // directo como handler de 'click' le mete el objeto Event ahí (todo
+    // listener de click recibe el evento), lo que rompe
+    // `intento < REINTENTOS_AUTO.length` (un Event nunca es menor que un
+    // número) y hacía que el botón manual perdiera toda la cascada de
+    // reintentos automáticos: un solo intento seco por click, directo al
+    // error de nuevo si fallaba. Bug real, reportado: "debo intentar un
+    // par de veces" — cada click debería haber vuelto a probar ~25s solo.
+    document.getElementById('reintentar').addEventListener('click', function () { cargar(); });
+  }
+
+  // Al volver de background/sleep (cerrar la pestaña o el navegador y volver
+  // a abrir), Tailscale/la red local puede tardar unos segundos en renegociar
+  // el túnel — el primer fetch falla por eso, no porque algo esté roto. En
+  // vez de tirar el panel de error al primer intento, reintenta solo un par
+  // de veces con espera creciente; recién si sigue sin conectar después de
+  // eso se muestra el error real con el botón manual.
+  //
+  // Reportado (2026-09-12): la ventana original (1.5+3+6=10.5s) se quedaba
+  // corta en la práctica — el usuario seguía teniendo que tocar "Reintentar"
+  // a mano un par de veces después de que se rendía sola, cada una
+  // arrancando de cero otros 10.5s. Estirado a ~30s de reintento automático
+  // antes de mostrar el botón manual — sigue habiendo un techo (no reintenta
+  // para siempre), pero cubre una reconexión lenta real sin que el usuario
+  // tenga que tocar nada.
+  var REINTENTOS_AUTO = [1500, 3000, 5000, 8000, 8000]; // ms de espera antes de cada reintento (~25.5s total)
+
+  function cargar(intento) {
+    intento = intento || 0;
+    document.getElementById('paneles').innerHTML = intento === 0
+      ? '<div class="panel"><div class="state"><div class="spin"></div><h2>Cargando</h2><p>Leyendo los datos de la Pi…</p></div></div>'
+      : '<div class="panel"><div class="state"><div class="spin"></div><h2>Reconectando</h2>' +
+        '<p>No respondió al primer intento — puede ser la red terminando de reconectar. ' +
+        'Reintentando (' + intento + '/' + REINTENTOS_AUTO.length + ')…</p></div></div>';
+
+    fetch('api/dashboard')
+      .then(function (r) {
+        if (!r.ok) throw new Error('El servidor respondió ' + r.status);
+        return r.json();
+      })
+      .then(function (json) {
+        D = json;
+        if (!D.porMes.length) {
+          errorPanel('La base está vacía',
+            'La Pi se conectó bien pero no hay movimientos guardados. Corré <code>npm run sync-once</code> ' +
+            'para traer el Google Sheet, o tocá <b>Sincronizar</b> arriba.');
+          return;
+        }
+        pintarCabecera(); pintarChips(); pintarPanel();
+      })
+      .catch(function (err) {
+        if (intento < REINTENTOS_AUTO.length) {
+          setTimeout(function () { cargar(intento + 1); }, REINTENTOS_AUTO[intento]);
+          return;
+        }
+        errorPanel('No pude leer los datos',
+          esc(err.message) + '. Si estás fuera de casa, revisá que Tailscale esté conectado; ' +
+          'si estás en casa, que el servicio siga vivo: <code>systemctl status expense-tracker</code>.');
+      });
+  }
+
+  window.addEventListener('hashchange', function () {
+    var nuevo = panelDeHash();
+    if (nuevo !== activo) { activo = nuevo; pintarChips(); pintarPanel(); }
+  });
+
+  // Delegado sobre #ledger (nunca se destruye) en vez de bindear las
+  // tarjetas directo: pintarCabecera() reemplaza su innerHTML completo cada
+  // vez que se toggla, así que un listener puesto sobre la tarjeta misma se
+  // perdería en el primer click.
+  var ledgerEl = document.getElementById('ledger');
+  ledgerEl.addEventListener('click', function (e) {
+    var el = e.target.closest('.led.tgl');
+    if (!el) return;
+    if (el.dataset.tgl === 'fondo') verFondo = !verFondo;
+    if (el.dataset.tgl === 'liquidez') verLiquidez = !verLiquidez;
+    pintarCabecera();
+  });
+  ledgerEl.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var el = e.target.closest('.led.tgl');
+    if (!el) return;
+    e.preventDefault();
+    el.click();
+  });
+
+  document.getElementById('btnSync').addEventListener('click', function () {
+    var b = this;
+    b.disabled = true; b.textContent = '↻ Sincronizando…';
+    fetch('api/sync', { method: 'POST' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        b.textContent = j.ok ? '✓ ' + j.filas + ' filas' : '✗ ' + j.error;
+        if (j.ok) cargar();
+      })
+      .catch(function (e) { b.textContent = '✗ ' + e.message; })
+      .finally(function () {
+        setTimeout(function () { b.disabled = false; b.textContent = '↻ Sincronizar'; }, 2500);
+      });
+  });
+
+  cargar();
+})();
+</script>
+</body>
+</html>
